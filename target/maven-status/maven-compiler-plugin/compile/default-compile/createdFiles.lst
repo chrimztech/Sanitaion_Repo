@@ -132,6 +132,7 @@ com\unza\ubirr\dto\PublicDtos$EventDto.class
 com\unza\ubirr\model\School.class
 com\unza\ubirr\service\ReportPdfService.class
 com\unza\ubirr\repository\DigitizationRecordRepository.class
+com\unza\ubirr\dto\AdminDtos$PromoteResult.class
 com\unza\ubirr\repository\ContentItemRepository.class
 com\unza\ubirr\dto\PublicDtos$ResourceSummaryDto.class
 com\unza\ubirr\service\TokenRevocationService.class

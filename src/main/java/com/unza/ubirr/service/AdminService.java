@@ -1014,12 +1014,13 @@ public class AdminService {
 
       // Auto-generate thumbnail (e.g. PDF first page)
       try {
+        final ContentItem savedItem = item;
         thumbnailService.generate(
           storageService.load(rec.scannedFilePath).getFile().toPath(),
-          cf.mimeType, item.id
+          cf.mimeType, savedItem.id
         ).ifPresent(thumbPath -> {
-          item.thumbnailPath = thumbPath;
-          contentItemRepository.save(item);
+          savedItem.thumbnailPath = thumbPath;
+          contentItemRepository.save(savedItem);
         });
       } catch (Exception ignored) {}
     }
