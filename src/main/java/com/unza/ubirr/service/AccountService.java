@@ -102,7 +102,7 @@ public class AccountService {
   public List<AccountDtos.BookmarkDto> bookmarks() {
     AppUser user = authContextService.requireUser();
     return bookmarkRepository.findByUser_IdOrderByCreatedAtDesc(user.id).stream()
-      .filter(bookmark -> publicService.canAccess(bookmark.contentItem, user))
+      .filter(bookmark -> bookmark.contentItem.deletedAt == null && bookmark.contentItem.title != null && bookmark.contentItem.slug != null)
       .map(bookmark -> new AccountDtos.BookmarkDto(bookmark.id, bookmark.createdAt, publicService.summary(bookmark.contentItem)))
       .toList();
   }
@@ -134,8 +134,7 @@ public class AccountService {
     List<ViewRecord> records = viewRecordRepository.findTop50ByUser_IdOrderByViewedAtDesc(user.id);
     Set<UUID> seen = new LinkedHashSet<>();
     return records.stream()
-      .filter(record -> record.contentItem != null && seen.add(record.contentItem.id))
-      .filter(record -> publicService.canAccess(record.contentItem, user))
+      .filter(record -> record.contentItem != null && record.contentItem.deletedAt == null && record.contentItem.title != null && record.contentItem.slug != null && seen.add(record.contentItem.id))
       .limit(10)
       .map(record -> new AccountDtos.RecentViewDto(record.viewedAt, publicService.summary(record.contentItem)))
       .toList();

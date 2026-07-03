@@ -106,7 +106,8 @@ public final class PublicDtos {
     Double latitude,
     Double longitude,
     String notes,
-    java.time.Instant createdAt
+    java.time.Instant createdAt,
+    String imageUrl
   ) {
   }
 

@@ -79,6 +79,11 @@ public class AdminController {
     return adminService.uploadContentFile(id, file);
   }
 
+  @PostMapping("/content/fix-access-levels")
+  public java.util.Map<String, Integer> fixDraftAccessLevels() {
+    return java.util.Map.of("fixed", adminService.fixDraftAccessLevels());
+  }
+
   @DeleteMapping("/content/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void deleteContent(@PathVariable UUID id) {
@@ -148,6 +153,12 @@ public class AdminController {
   @PutMapping("/digitization/{id}")
   public AdminDtos.DigitizationDto updateDigitization(@PathVariable UUID id, @Valid @RequestBody AdminDtos.SaveDigitizationRequest request) {
     return adminService.saveDigitization(id, request);
+  }
+
+  @DeleteMapping("/digitization/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void deleteDigitization(@PathVariable UUID id) {
+    adminService.deleteDigitization(id);
   }
 
   @PatchMapping("/digitization/{id}/status")
@@ -339,6 +350,12 @@ public class AdminController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void deleteSite(@PathVariable UUID id) {
     adminService.deleteSite(id);
+  }
+
+  @PostMapping("/sites/{id}/image")
+  public java.util.Map<String, String> uploadSiteImage(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
+    String url = adminService.uploadSiteImage(id, file);
+    return java.util.Map.of("url", url);
   }
 
   @GetMapping("/training")

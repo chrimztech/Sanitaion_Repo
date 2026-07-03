@@ -9,7 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ViewRecordRepository extends JpaRepository<ViewRecord, Long> {
-  List<ViewRecord> findTop50ByUser_IdOrderByViewedAtDesc(UUID userId);
+  @Query("SELECT v FROM ViewRecord v JOIN FETCH v.contentItem ci LEFT JOIN FETCH ci.category WHERE v.user.id = :userId ORDER BY v.viewedAt DESC LIMIT 50")
+  List<ViewRecord> findTop50ByUser_IdOrderByViewedAtDesc(@Param("userId") UUID userId);
 
   @Modifying
   @Query("UPDATE ViewRecord v SET v.user = null WHERE v.user.id = :userId")

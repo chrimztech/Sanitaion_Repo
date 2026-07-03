@@ -307,7 +307,8 @@ public final class AdminDtos {
     Double longitude,
     String notes,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    String imageUrl
   ) {
   }
 

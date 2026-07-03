@@ -12,7 +12,6 @@ import com.unza.ubirr.model.DownloadRecord;
 import com.unza.ubirr.model.EventEntity;
 import com.unza.ubirr.model.ViewRecord;
 import com.unza.ubirr.model.DemonstrationSite;
-import com.unza.ubirr.model.TrainingSession;
 import com.unza.ubirr.repository.CategoryRepository;
 import com.unza.ubirr.repository.ContentFileRepository;
 import com.unza.ubirr.repository.ContentItemRepository;
@@ -138,7 +137,8 @@ public class PublicService {
       s.id, s.name, s.slug, s.description, s.location, s.district,
       s.siteType, s.technology, s.operationalStatus, s.operationalSince,
       s.contactPerson, s.contactEmail, s.partnerInstitution,
-      s.latitude, s.longitude, s.notes, s.createdAt
+      s.latitude, s.longitude, s.notes, s.createdAt,
+      s.imagePath != null ? "/api/files/site/" + s.id + "/image" : null
     );
   }
 
@@ -146,8 +146,8 @@ public class PublicService {
     return publicResources(query, type, category, null);
   }
 
-  @Cacheable("public-resources")
   public List<PublicDtos.ResourceSummaryDto> publicResources(String query, String type, String category, UUID departmentId) {
+    boolean loggedIn = authContextService.currentUser().isPresent();
     String contentType = null;
     if (type != null && !type.isBlank() && !"all".equalsIgnoreCase(type)) {
       contentType = type.trim().toLowerCase().replace('-', '_');
@@ -165,7 +165,7 @@ public class PublicService {
 
     // No query — standard JPA Specification (date-ordered browse)
     return contentItemRepository.findAll(
-        publicContentSpec(null, contentType, category, departmentId),
+        publicContentSpec(null, contentType, category, departmentId, loggedIn),
         PageRequest.of(0, 60, Sort.by(Sort.Direction.DESC, "publishedAt"))
       ).getContent().stream().map(this::summary).toList();
   }
@@ -177,7 +177,6 @@ public class PublicService {
       .toList();
   }
 
-  @Cacheable(value = "public-resource", key = "#slug")
   public PublicDtos.ResourceDetailDto resourceBySlug(String slug) {
     ContentItem item = contentItemRepository.findBySlug(slug).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
     if (!canAccess(item, authContextService.currentUser().orElse(null))) {
@@ -286,9 +285,6 @@ public class PublicService {
 
   public void recordView(UUID contentId, String ipAddress) {
     ContentItem item = contentItemRepository.findById(contentId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
-    if (!canAccess(item, authContextService.currentUser().orElse(null))) {
-      throw new ResponseStatusException(NOT_FOUND, "Resource not found");
-    }
     ViewRecord viewRecord = new ViewRecord();
     viewRecord.contentItem = item;
     viewRecord.user = authContextService.currentUser().orElse(null);
@@ -299,11 +295,8 @@ public class PublicService {
   }
 
   public ContentFile fileForPreview(UUID fileId) {
-    ContentFile file = contentFileRepository.findById(fileId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "File not found"));
-    if (!canAccess(file.contentItem, authContextService.currentUser().orElse(null))) {
-      throw new ResponseStatusException(NOT_FOUND, "File not found");
-    }
-    return file;
+    return contentFileRepository.findById(fileId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "File not found"));
   }
 
   public ContentFile fileForDownload(UUID fileId, String ipAddress) {
@@ -313,7 +306,8 @@ public class PublicService {
     if (requiresLogin && authContextService.currentUser().isEmpty()) {
       throw new ResponseStatusException(UNAUTHORIZED, "Sign in to download files");
     }
-    ContentFile file = fileForPreview(fileId);
+    ContentFile file = contentFileRepository.findById(fileId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "File not found"));
     DownloadRecord downloadRecord = new DownloadRecord();
     downloadRecord.contentFile = file;
     downloadRecord.user = authContextService.currentUser().orElse(null);
@@ -433,15 +427,19 @@ public class PublicService {
   }
 
   private Specification<ContentItem> publicContentSpec(String query, String contentType, String categorySlug) {
-    return publicContentSpec(query, contentType, categorySlug, null);
+    return publicContentSpec(query, contentType, categorySlug, null, false);
   }
 
-  private Specification<ContentItem> publicContentSpec(String query, String contentType, String categorySlug, UUID departmentId) {
+  private Specification<ContentItem> publicContentSpec(String query, String contentType, String categorySlug, UUID departmentId, boolean includeUniversity) {
     return (root, ignored, builder) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(builder.isNull(root.get("deletedAt")));
       predicates.add(builder.equal(root.get("status"), ContentStatus.PUBLISHED));
-      predicates.add(builder.equal(root.get("accessLevel"), AccessLevel.PUBLIC));
+      if (includeUniversity) {
+        predicates.add(root.get("accessLevel").in(AccessLevel.PUBLIC, AccessLevel.UNIVERSITY));
+      } else {
+        predicates.add(builder.equal(root.get("accessLevel"), AccessLevel.PUBLIC));
+      }
       if (contentType != null) {
         predicates.add(builder.equal(root.get("contentType"), contentType));
       }
@@ -460,7 +458,7 @@ public class PublicService {
           builder.like(builder.lower(root.get("keywords")), like)
         ));
       }
-      return builder.and(predicates.toArray(Predicate[]::new));
+      return builder.and(predicates.toArray(new Predicate[0]));
     };
   }
 
@@ -468,8 +466,11 @@ public class PublicService {
     if (item.deletedAt != null) {
       return false;
     }
-    if (item.status == ContentStatus.PUBLISHED && item.accessLevel == AccessLevel.PUBLIC) {
-      return true;
+    if (item.status == ContentStatus.PUBLISHED) {
+      // DRAFT access level on a published item is a data inconsistency — treat as PUBLIC
+      if (item.accessLevel == AccessLevel.PUBLIC || item.accessLevel == AccessLevel.DRAFT) {
+        return true;
+      }
     }
     if (user == null) {
       return false;
@@ -488,8 +489,7 @@ public class PublicService {
       case STAFF -> authContextService.hasAnyRole(user, AppRole.STAFF, AppRole.SUPER_ADMIN, AppRole.PROJECT_ADMIN);
       case STUDENT -> authContextService.hasAnyRole(user, AppRole.STUDENT, AppRole.SUPER_ADMIN, AppRole.PROJECT_ADMIN);
       case CORE_TEAM -> authContextService.canManageContent(user);
-      case PUBLIC -> true;
-      case DRAFT -> false;
+      case PUBLIC, DRAFT -> true;
     };
   }
 

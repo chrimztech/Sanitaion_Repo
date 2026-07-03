@@ -91,6 +91,22 @@ public class StorageService {
     }
   }
 
+  public String storeSiteImage(UUID siteId, MultipartFile file) {
+    try {
+      String extension = fileExtension(file.getOriginalFilename());
+      String safeName = "image" + (extension.isBlank() ? "" : "." + extension);
+      Path directory = root.resolve("thumbnails").resolve("sites").resolve(siteId.toString());
+      Files.createDirectories(directory);
+      Path target = directory.resolve(safeName);
+      try (InputStream inputStream = file.getInputStream()) {
+        Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+      return root.relativize(target).toString().replace('\\', '/');
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to store site image", e);
+    }
+  }
+
   public Resource load(String relativePath) {
     return new FileSystemResource(root.resolve(relativePath).normalize());
   }

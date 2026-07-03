@@ -72,6 +72,9 @@ public class DemonstrationSite {
   @Column(columnDefinition = "TEXT")
   public String notes;
 
+  @Column
+  public String imagePath;
+
   @CreationTimestamp
   @Column(nullable = false, updatable = false)
   public Instant createdAt;

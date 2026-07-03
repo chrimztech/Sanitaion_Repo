@@ -267,6 +267,10 @@ public class AdminService {
     item.status = nextStatus;
     if (nextStatus == ContentStatus.PUBLISHED) {
       item.publishedAt = java.time.Instant.now();
+      // Publishing with DRAFT access level makes files inaccessible to users; default to PUBLIC
+      if (item.accessLevel == AccessLevel.DRAFT) {
+        item.accessLevel = AccessLevel.PUBLIC;
+      }
     }
     contentItemRepository.save(item);
 
@@ -374,6 +378,22 @@ public class AdminService {
     auditService.log(user, "content.file.delete", "content_files", fileId.toString());
   }
 
+  public int fixDraftAccessLevels() {
+    authContextService.requireAdmin();
+    AppUser user = authContextService.requireUser();
+    List<ContentItem> broken = contentItemRepository.findAll().stream()
+        .filter(i -> i.status == ContentStatus.PUBLISHED && i.accessLevel == AccessLevel.DRAFT)
+        .toList();
+    for (ContentItem i : broken) {
+      i.accessLevel = AccessLevel.PUBLIC;
+    }
+    contentItemRepository.saveAll(broken);
+    if (!broken.isEmpty()) {
+      auditService.log(user, "content.fix_access_levels", "content_items", broken.size() + " items upgraded");
+    }
+    return broken.size();
+  }
+
   public void deleteContent(UUID id) {
     authContextService.requireAdmin();
     AppUser user = authContextService.requireUser();
@@ -477,6 +497,18 @@ public class AdminService {
     DigitizationRecord saved = digitizationRecordRepository.save(record);
     auditService.log(user, id == null ? "digitization.create" : "digitization.update", "digitization_records", saved.id.toString());
     return digitizationDto(saved);
+  }
+
+  public void deleteDigitization(UUID id) {
+    authContextService.requireAdmin();
+    AppUser user = authContextService.requireUser();
+    DigitizationRecord record = digitizationRecordRepository.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Digitization record not found"));
+    if (record.scannedFilePath != null) {
+      try { storageService.delete(record.scannedFilePath); } catch (Exception ignored) {}
+    }
+    digitizationRecordRepository.delete(record);
+    auditService.log(user, "digitization.delete", "digitization_records", id.toString());
   }
 
   public List<AdminDtos.UserAdminDto> users() {
@@ -752,8 +784,21 @@ public class AdminService {
       s.id, s.name, s.slug, s.description, s.location, s.district,
       s.siteType, s.technology, s.operationalStatus, s.operationalSince,
       s.contactPerson, s.contactEmail, s.partnerInstitution,
-      s.latitude, s.longitude, s.notes, s.createdAt, s.updatedAt
+      s.latitude, s.longitude, s.notes, s.createdAt, s.updatedAt,
+      s.imagePath != null ? "/api/files/site/" + s.id + "/image" : null
     );
+  }
+
+  public String uploadSiteImage(UUID id, MultipartFile file) {
+    authContextService.requireContentManager();
+    DemonstrationSite site = demonstrationSiteRepository.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Site not found"));
+    if (site.imagePath != null) {
+      storageService.delete(site.imagePath);
+    }
+    site.imagePath = storageService.storeSiteImage(id, file);
+    demonstrationSiteRepository.save(site);
+    return "/api/files/site/" + id + "/image";
   }
 
   public List<AdminDtos.AuditLogDto> audit(String action, String entityType) {
@@ -1037,8 +1082,7 @@ public class AdminService {
   }
 
   private AccessLevel copyrightToAccessLevel(String copyrightStatus) {
-    if ("public_domain".equalsIgnoreCase(copyrightStatus)) return AccessLevel.PUBLIC;
-    return AccessLevel.UNIVERSITY; // institutional / restricted / unknown → university-only by default
+    return AccessLevel.PUBLIC;
   }
 
   public String getScanFilePath(UUID recordId) {

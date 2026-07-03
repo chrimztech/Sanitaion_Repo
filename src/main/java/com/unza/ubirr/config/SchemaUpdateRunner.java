@@ -24,6 +24,7 @@ public class SchemaUpdateRunner implements ApplicationRunner {
   public void run(ApplicationArguments args) {
     fixAuthTypeConstraint();
     setupFullTextSearch();
+    fixPublishedDraftAccessLevels();
   }
 
   private void fixAuthTypeConstraint() {
@@ -91,6 +92,14 @@ public class SchemaUpdateRunner implements ApplicationRunner {
             setweight(to_tsvector('english', coalesce(authors,  '')), 'C') ||
             setweight(to_tsvector('english', coalesce(body,     '')), 'D')
         WHERE search_vector IS NULL
+        """);
+  }
+
+  private void fixPublishedDraftAccessLevels() {
+    jdbcTemplate.execute("""
+        UPDATE content_items
+        SET access_level = 'PUBLIC'
+        WHERE status = 'PUBLISHED' AND access_level = 'DRAFT'
         """);
   }
 }

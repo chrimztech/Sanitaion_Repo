@@ -2,7 +2,9 @@ package com.unza.ubirr.controller;
 
 import com.unza.ubirr.model.ContentFile;
 import com.unza.ubirr.model.ContentItem;
+import com.unza.ubirr.model.DemonstrationSite;
 import com.unza.ubirr.repository.ContentItemRepository;
+import com.unza.ubirr.repository.DemonstrationSiteRepository;
 import com.unza.ubirr.service.PublicService;
 import com.unza.ubirr.service.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,11 +27,13 @@ public class FileController {
   private final PublicService publicService;
   private final StorageService storageService;
   private final ContentItemRepository contentItemRepository;
+  private final DemonstrationSiteRepository demonstrationSiteRepository;
 
-  public FileController(PublicService publicService, StorageService storageService, ContentItemRepository contentItemRepository) {
+  public FileController(PublicService publicService, StorageService storageService, ContentItemRepository contentItemRepository, DemonstrationSiteRepository demonstrationSiteRepository) {
     this.publicService = publicService;
     this.storageService = storageService;
     this.contentItemRepository = contentItemRepository;
+    this.demonstrationSiteRepository = demonstrationSiteRepository;
   }
 
   @GetMapping("/{fileId}/preview")
@@ -66,6 +70,21 @@ public class FileController {
     return ResponseEntity.ok()
       .contentType(mediaType)
       .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("thumbnail").build().toString())
+      .body(resource);
+  }
+
+  @GetMapping("/site/{siteId}/image")
+  public ResponseEntity<Resource> siteImage(@PathVariable UUID siteId) {
+    DemonstrationSite site = demonstrationSiteRepository.findById(siteId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Site not found"));
+    if (site.imagePath == null) {
+      throw new ResponseStatusException(NOT_FOUND, "No image");
+    }
+    Resource resource = storageService.load(site.imagePath);
+    MediaType mediaType = storageService.mediaType(site.imagePath, null);
+    return ResponseEntity.ok()
+      .contentType(mediaType)
+      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("site-image").build().toString())
       .body(resource);
   }
 }
