@@ -111,7 +111,7 @@ public class ReportPdfService {
 
       if (logoBytes != null) {
         try {
-          Image logoImg = Image.getInstance(logoBytes, null);
+          Image logoImg = Image.getInstance(logoBytes);
           logoImg.scaleToFit(120, 64);
           logoImg.setSpacingAfter(8);
           doc.add(logoImg);
@@ -380,7 +380,7 @@ public class ReportPdfService {
       // Logo left-aligned inside header bar
       if (logoBytes != null) {
         try {
-          Image logo = Image.getInstance(logoBytes, null);
+          Image logo = Image.getInstance(logoBytes);
           logo.scaleToFit(100, hHeight - 6);
           logo.setAbsolutePosition(document.left() + 6, hBottom + 3);
           cb.addImage(logo);
