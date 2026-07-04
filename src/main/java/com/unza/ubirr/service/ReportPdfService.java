@@ -87,10 +87,16 @@ public class ReportPdfService {
       downloadsByItem.put((UUID) row[0], (Long) row[1]);
     }
 
+    // Load logo from classpath
+    byte[] logoBytes = null;
+    try (var stream = getClass().getClassLoader().getResourceAsStream("logo.png")) {
+      if (stream != null) logoBytes = stream.readAllBytes();
+    } catch (Exception ignored) {}
+
     try (var out = new ByteArrayOutputStream()) {
       Document doc = new Document(PageSize.A4.rotate(), 36, 36, 60, 36);
       PdfWriter writer = PdfWriter.getInstance(doc, out);
-      writer.setPageEvent(new HeaderFooter());
+      writer.setPageEvent(new HeaderFooter(logoBytes));
       doc.open();
 
       // ── Cover section ──────────────────────────────────────────────────────
@@ -102,6 +108,15 @@ public class ReportPdfService {
       Font bodyFont    = FontFactory.getFont(FontFactory.HELVETICA, 9, Color.BLACK);
       Font bodyBold    = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, Color.BLACK);
       Font hdrFont     = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, WHITE);
+
+      if (logoBytes != null) {
+        try {
+          Image logoImg = Image.getInstance(logoBytes, null);
+          logoImg.scaleToFit(120, 64);
+          logoImg.setSpacingAfter(8);
+          doc.add(logoImg);
+        } catch (Exception ignored) {}
+      }
 
       Paragraph title = new Paragraph("UNZA Sanitation Hub — System Report", titleFont);
       title.setAlignment(Element.ALIGN_LEFT);
@@ -345,16 +360,39 @@ public class ReportPdfService {
   // ── Page header/footer via PdfPageEventHelper ──────────────────────────
 
   private static class HeaderFooter extends PdfPageEventHelper {
-    private final Font footerFont = FontFactory.getFont(FontFactory.HELVETICA, 7, GREY_TEXT);
+    private final Font footerFont  = FontFactory.getFont(FontFactory.HELVETICA, 7, GREY_TEXT);
+    private final Font headerLabel = FontFactory.getFont(FontFactory.HELVETICA, 8, WHITE);
+    private final byte[] logoBytes;
+
+    HeaderFooter(byte[] logoBytes) { this.logoBytes = logoBytes; }
 
     @Override
     public void onEndPage(PdfWriter writer, Document document) {
       PdfContentByte cb = writer.getDirectContent();
-      // Top green bar
+
+      // Header bar
+      float hBottom = document.top() + 2;
+      float hHeight = 38;
       cb.setColorFill(GREEN_DARK);
-      cb.rectangle(document.left(), document.top() + 6, document.right() - document.left(), 4);
+      cb.rectangle(document.left(), hBottom, document.right() - document.left(), hHeight);
       cb.fill();
-      // Footer line
+
+      // Logo left-aligned inside header bar
+      if (logoBytes != null) {
+        try {
+          Image logo = Image.getInstance(logoBytes, null);
+          logo.scaleToFit(100, hHeight - 6);
+          logo.setAbsolutePosition(document.left() + 6, hBottom + 3);
+          cb.addImage(logo);
+        } catch (Exception ignored) {}
+      }
+
+      // Site name right-aligned inside header bar
+      ColumnText.showTextAligned(cb, Element.ALIGN_RIGHT,
+          new Phrase("UNZA Sanitation Hub", headerLabel),
+          document.right() - 6, hBottom + hHeight / 2 - 3, 0);
+
+      // Footer rule
       cb.setColorStroke(new Color(229, 231, 235));
       cb.moveTo(document.left(), document.bottom() - 8);
       cb.lineTo(document.right(), document.bottom() - 8);
