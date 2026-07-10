@@ -358,6 +358,33 @@ public class AdminController {
     return java.util.Map.of("url", url);
   }
 
+  @GetMapping("/banners")
+  public List<AdminDtos.HeroBannerDto> banners() {
+    return adminService.adminBanners();
+  }
+
+  @PostMapping("/banners")
+  public AdminDtos.HeroBannerDto createBanner(@Valid @RequestBody AdminDtos.SaveHeroBannerRequest request) {
+    return adminService.saveBanner(null, request);
+  }
+
+  @PutMapping("/banners/{id}")
+  public AdminDtos.HeroBannerDto updateBanner(@PathVariable UUID id, @Valid @RequestBody AdminDtos.SaveHeroBannerRequest request) {
+    return adminService.saveBanner(id, request);
+  }
+
+  @DeleteMapping("/banners/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void deleteBanner(@PathVariable UUID id) {
+    adminService.deleteBanner(id);
+  }
+
+  @PostMapping("/banners/{id}/image")
+  public java.util.Map<String, String> uploadBannerImage(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
+    String url = adminService.uploadBannerImage(id, file);
+    return java.util.Map.of("url", url);
+  }
+
   @GetMapping("/training")
   public List<AdminDtos.TrainingSessionDto> trainingSessions() {
     return adminService.adminTrainingSessions();

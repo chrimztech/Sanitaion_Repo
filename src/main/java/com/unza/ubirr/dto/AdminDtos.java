@@ -400,4 +400,27 @@ public final class AdminDtos {
     List<RecentContentDto> recentContent
   ) {
   }
+
+  public record HeroBannerDto(
+    UUID id,
+    String title,
+    String subtitle,
+    String imageUrl,
+    String linkUrl,
+    int displayOrder,
+    boolean active,
+    Instant createdAt,
+    Instant updatedAt
+  ) {
+  }
+
+  public record SaveHeroBannerRequest(
+    @NotBlank(message = "Title is required")
+    String title,
+    String subtitle,
+    String linkUrl,
+    Integer displayOrder,
+    Boolean active
+  ) {
+  }
 }

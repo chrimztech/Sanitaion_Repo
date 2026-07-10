@@ -34,6 +34,7 @@ F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\DigitizationRecord.
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\DigitizationStatus.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\DownloadRecord.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\EventEntity.java
+F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\HeroBanner.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\Notification.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\ReadingList.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\model\ReadingListItem.java
@@ -59,6 +60,7 @@ F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\DepartmentRepo
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\DigitizationRecordRepository.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\DownloadRecordRepository.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\EventRepository.java
+F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\HeroBannerRepository.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\NotificationRepository.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\ReadingListItemRepository.java
 F:\Uni Zambia Hub\backend\src\main\java\com\unza\ubirr\repository\ReadingListRepository.java

@@ -1,6 +1,8 @@
 package com.unza.ubirr.controller;
 
+import com.unza.ubirr.dto.AdminDtos;
 import com.unza.ubirr.dto.PublicDtos;
+import com.unza.ubirr.service.AdminService;
 import com.unza.ubirr.service.CaptchaService;
 import com.unza.ubirr.service.PublicService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,10 +22,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class PublicController {
   private final PublicService publicService;
   private final CaptchaService captchaService;
+  private final AdminService adminService;
 
-  public PublicController(PublicService publicService, CaptchaService captchaService) {
+  public PublicController(PublicService publicService, CaptchaService captchaService, AdminService adminService) {
     this.publicService = publicService;
     this.captchaService = captchaService;
+    this.adminService = adminService;
+  }
+
+  @GetMapping("/banners")
+  public List<AdminDtos.HeroBannerDto> banners() {
+    return adminService.publicBanners();
   }
 
   @GetMapping("/captcha-config")

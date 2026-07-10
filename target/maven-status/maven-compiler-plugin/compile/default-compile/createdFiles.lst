@@ -22,6 +22,7 @@ com\unza\ubirr\repository\SystemSettingRepository.class
 com\unza\ubirr\service\CaptchaService.class
 com\unza\ubirr\dto\PublicDtos$TrainingSessionPublicDto.class
 com\unza\ubirr\model\AppRole.class
+com\unza\ubirr\dto\AdminDtos$HeroBannerDto.class
 com\unza\ubirr\model\Department.class
 com\unza\ubirr\repository\ReadingListRepository.class
 com\unza\ubirr\config\ApiExceptionHandler.class
@@ -35,6 +36,7 @@ com\unza\ubirr\dto\AccountDtos$ReadingListDto.class
 com\unza\ubirr\model\DigitizationRecord.class
 com\unza\ubirr\dto\AccountDtos$MarkNotificationsReadRequest.class
 com\unza\ubirr\repository\ContentTypeDefRepository.class
+com\unza\ubirr\repository\HeroBannerRepository.class
 com\unza\ubirr\security\JwtService.class
 com\unza\ubirr\model\UserSession.class
 com\unza\ubirr\service\OapAuthService$OapData.class
@@ -107,11 +109,13 @@ com\unza\ubirr\model\Tag.class
 com\unza\ubirr\service\CaptchaService$ConfigDto.class
 com\unza\ubirr\dto\AccountDtos$SaveReadingListItemRequest.class
 com\unza\ubirr\dto\AccountDtos$TrainingSessionPublicDto.class
+com\unza\ubirr\dto\AdminDtos$SaveHeroBannerRequest.class
 com\unza\ubirr\dto\AdminDtos$SaveTrainingSessionRequest.class
 com\unza\ubirr\repository\DepartmentRepository.class
 com\unza\ubirr\config\StorageProperties.class
 com\unza\ubirr\repository\TrainingRegistrationRepository.class
 com\unza\ubirr\dto\AuthDtos$RegisterRequest.class
+com\unza\ubirr\model\HeroBanner.class
 com\unza\ubirr\dto\AccountDtos$UpdateProfileRequest.class
 com\unza\ubirr\repository\DownloadRecordRepository.class
 com\unza\ubirr\dto\AdminDtos$SaveEventRequest.class

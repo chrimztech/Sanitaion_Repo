@@ -13,6 +13,7 @@ import com.unza.ubirr.model.ContentFile;
 import com.unza.ubirr.model.ContentItem;
 import com.unza.ubirr.model.ContentStatus;
 import com.unza.ubirr.model.DemonstrationSite;
+import com.unza.ubirr.model.HeroBanner;
 import com.unza.ubirr.model.Department;
 import com.unza.ubirr.model.DigitizationRecord;
 import com.unza.ubirr.model.DigitizationStatus;
@@ -35,6 +36,7 @@ import com.unza.ubirr.repository.BookmarkRepository;
 import com.unza.ubirr.model.ContentTypeDef;
 import com.unza.ubirr.repository.ContentTypeDefRepository;
 import com.unza.ubirr.repository.DemonstrationSiteRepository;
+import com.unza.ubirr.repository.HeroBannerRepository;
 import com.unza.ubirr.repository.CategoryRepository;
 import com.unza.ubirr.repository.ContentFileRepository;
 import com.unza.ubirr.repository.ContentItemRepository;
@@ -91,6 +93,7 @@ public class AdminService {
   private final ReadingListRepository readingListRepository;
   private final ReadingListItemRepository readingListItemRepository;
   private final DemonstrationSiteRepository demonstrationSiteRepository;
+  private final HeroBannerRepository heroBannerRepository;
   private final ContentTypeDefRepository contentTypeDefRepository;
   private final TrainingSessionRepository trainingSessionRepository;
   private final TrainingRegistrationRepository trainingRegistrationRepository;
@@ -123,6 +126,7 @@ public class AdminService {
     ReadingListRepository readingListRepository,
     ReadingListItemRepository readingListItemRepository,
     DemonstrationSiteRepository demonstrationSiteRepository,
+    HeroBannerRepository heroBannerRepository,
     ContentTypeDefRepository contentTypeDefRepository,
     TrainingSessionRepository trainingSessionRepository,
     TrainingRegistrationRepository trainingRegistrationRepository,
@@ -154,6 +158,7 @@ public class AdminService {
     this.readingListRepository = readingListRepository;
     this.readingListItemRepository = readingListItemRepository;
     this.demonstrationSiteRepository = demonstrationSiteRepository;
+    this.heroBannerRepository = heroBannerRepository;
     this.contentTypeDefRepository = contentTypeDefRepository;
     this.trainingSessionRepository = trainingSessionRepository;
     this.trainingRegistrationRepository = trainingRegistrationRepository;
@@ -1381,6 +1386,61 @@ public class AdminService {
     }
 
     return sb.toString();
+  }
+
+  // ── Hero Banners ─────────────────────────────────────────────────────────
+
+  public List<AdminDtos.HeroBannerDto> adminBanners() {
+    authContextService.requireContentManager();
+    return heroBannerRepository.findAllByOrderByDisplayOrderAsc().stream()
+      .map(this::bannerDto)
+      .toList();
+  }
+
+  public AdminDtos.HeroBannerDto saveBanner(UUID id, AdminDtos.SaveHeroBannerRequest req) {
+    authContextService.requireContentManager();
+    HeroBanner banner = id == null
+      ? new HeroBanner()
+      : heroBannerRepository.findById(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Banner not found"));
+    banner.title = req.title().trim();
+    banner.subtitle = req.subtitle();
+    banner.linkUrl = req.linkUrl();
+    banner.displayOrder = req.displayOrder() != null ? req.displayOrder() : 0;
+    if (req.active() != null) banner.active = req.active();
+    banner = heroBannerRepository.save(banner);
+    return bannerDto(banner);
+  }
+
+  public void deleteBanner(UUID id) {
+    authContextService.requireAdmin();
+    HeroBanner banner = heroBannerRepository.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Banner not found"));
+    if (banner.imagePath != null) storageService.delete(banner.imagePath);
+    heroBannerRepository.deleteById(id);
+  }
+
+  public String uploadBannerImage(UUID id, MultipartFile file) {
+    authContextService.requireContentManager();
+    HeroBanner banner = heroBannerRepository.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Banner not found"));
+    if (banner.imagePath != null) storageService.delete(banner.imagePath);
+    banner.imagePath = storageService.storeBannerImage(id, file);
+    heroBannerRepository.save(banner);
+    return "/api/files/banner/" + id + "/image";
+  }
+
+  public List<AdminDtos.HeroBannerDto> publicBanners() {
+    return heroBannerRepository.findAllByActiveTrueOrderByDisplayOrderAsc().stream()
+      .map(this::bannerDto)
+      .toList();
+  }
+
+  private AdminDtos.HeroBannerDto bannerDto(HeroBanner b) {
+    return new AdminDtos.HeroBannerDto(
+      b.id, b.title, b.subtitle,
+      b.imagePath != null ? "/api/files/banner/" + b.id + "/image" : null,
+      b.linkUrl, b.displayOrder, b.active, b.createdAt, b.updatedAt
+    );
   }
 
   private void appendCsvRow(StringBuilder sb, String... fields) {

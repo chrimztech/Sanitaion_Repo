@@ -27,6 +27,7 @@ public class StorageService {
     Files.createDirectories(root.resolve("content-files"));
     Files.createDirectories(root.resolve("thumbnails"));
     Files.createDirectories(root.resolve("digitization-files"));
+    Files.createDirectories(root.resolve("banners"));
   }
 
   public StoredFile storeContentFile(UUID contentId, MultipartFile file) {
@@ -104,6 +105,22 @@ public class StorageService {
       return root.relativize(target).toString().replace('\\', '/');
     } catch (IOException e) {
       throw new RuntimeException("Failed to store site image", e);
+    }
+  }
+
+  public String storeBannerImage(UUID bannerId, MultipartFile file) {
+    try {
+      String extension = fileExtension(file.getOriginalFilename());
+      String safeName = "image" + (extension.isBlank() ? "" : "." + extension);
+      Path directory = root.resolve("banners").resolve(bannerId.toString());
+      Files.createDirectories(directory);
+      Path target = directory.resolve(safeName);
+      try (InputStream inputStream = file.getInputStream()) {
+        Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+      return root.relativize(target).toString().replace('\\', '/');
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to store banner image", e);
     }
   }
 
