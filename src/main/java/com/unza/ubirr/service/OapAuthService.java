@@ -1,5 +1,8 @@
 package com.unza.ubirr.service;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.unza.ubirr.dto.AuthDtos;
 import com.unza.ubirr.model.AppRole;
 import com.unza.ubirr.model.AppUser;
@@ -11,47 +14,71 @@ import com.unza.ubirr.repository.NotificationRepository;
 import com.unza.ubirr.repository.UserRoleRepository;
 import java.time.Instant;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Transactional
 public class OapAuthService {
-
-  private static final String OAP_URL = "https://devoap.unza.zm/api/v1/customers/login";
+  private static final Logger log = LoggerFactory.getLogger(OapAuthService.class);
 
   private final AppUserRepository appUserRepository;
   private final UserRoleRepository userRoleRepository;
   private final NotificationRepository notificationRepository;
   private final AuthService authService;
   private final RestClient restClient;
+  private final String oapLoginUrl;
+  private final String oapApiToken;
 
   public OapAuthService(
     AppUserRepository appUserRepository,
     UserRoleRepository userRoleRepository,
     NotificationRepository notificationRepository,
     AuthService authService,
-    RestClient.Builder restClientBuilder
+    RestClient.Builder restClientBuilder,
+    @Value("${app.oap.login-url}") String oapLoginUrl,
+    @Value("${app.oap.api-token:}") String oapApiToken
   ) {
     this.appUserRepository = appUserRepository;
     this.userRoleRepository = userRoleRepository;
     this.notificationRepository = notificationRepository;
     this.authService = authService;
     this.restClient = restClientBuilder.build();
+    this.oapLoginUrl = oapLoginUrl;
+    this.oapApiToken = oapApiToken;
   }
 
   public AuthDtos.AuthResponse studentLogin(AuthDtos.StudentLoginRequest request) {
+    if (oapApiToken == null || oapApiToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+        "Student authentication service is not configured");
+    }
+
     OapResponse oapResponse;
     try {
       oapResponse = restClient.post()
-        .uri(OAP_URL)
+        .uri(oapLoginUrl)
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + oapApiToken.trim())
         .body(new OapRequest(request.username().trim(), request.password(), request.instance().trim().toLowerCase()))
         .retrieve()
         .body(OapResponse.class);
+    } catch (RestClientResponseException e) {
+      if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid student credentials");
+      }
+      log.error("OAP login call to {} returned {}: {}", oapLoginUrl, e.getStatusCode(), e.getResponseBodyAsString());
+      throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+        "Student authentication service is temporarily unavailable. Please try again later.");
     } catch (Exception e) {
+      log.error("OAP login call to {} failed", oapLoginUrl, e);
       throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
         "Student authentication service is temporarily unavailable. Please try again later.");
     }
@@ -159,10 +186,15 @@ public class OapAuthService {
 
   private record OapRequest(String username, String password, String instance) {}
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
   private record OapResponse(boolean success, String message, OapData data) {}
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
   private record OapData(OapUserData user) {}
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
   private record OapUserData(
     long id,
     String username,
