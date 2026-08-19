@@ -730,6 +730,56 @@ public class AdminService {
     );
   }
 
+  private static final class AccessAcc {
+    String title;
+    String userName;
+    String userEmail;
+    long views;
+    long downloads;
+    Instant lastAccessed;
+  }
+
+  public List<AdminDtos.ResourceAccessRow> resourceAccessReport() {
+    authContextService.requireContentManager();
+    record Key(UUID contentItemId, UUID userId) {}
+    Map<Key, AccessAcc> merged = new LinkedHashMap<>();
+
+    for (Object[] row : viewRecordRepository.countGroupedByContentItemAndUser()) {
+      Key key = new Key((UUID) row[0], (UUID) row[2]);
+      AccessAcc acc = merged.computeIfAbsent(key, k -> new AccessAcc());
+      acc.title = (String) row[1];
+      acc.userName = (String) row[3];
+      acc.userEmail = (String) row[4];
+      acc.views = (Long) row[5];
+      Instant last = (Instant) row[6];
+      if (last != null && (acc.lastAccessed == null || last.isAfter(acc.lastAccessed))) acc.lastAccessed = last;
+    }
+    for (Object[] row : downloadRecordRepository.countGroupedByContentItemAndUser()) {
+      Key key = new Key((UUID) row[0], (UUID) row[2]);
+      AccessAcc acc = merged.computeIfAbsent(key, k -> new AccessAcc());
+      acc.title = (String) row[1];
+      acc.userName = (String) row[3];
+      acc.userEmail = (String) row[4];
+      acc.downloads = (Long) row[5];
+      Instant last = (Instant) row[6];
+      if (last != null && (acc.lastAccessed == null || last.isAfter(acc.lastAccessed))) acc.lastAccessed = last;
+    }
+
+    return merged.entrySet().stream()
+      .map(e -> new AdminDtos.ResourceAccessRow(
+        e.getKey().contentItemId(),
+        e.getValue().title,
+        e.getKey().userId(),
+        e.getValue().userName,
+        e.getValue().userEmail,
+        e.getValue().views,
+        e.getValue().downloads,
+        e.getValue().lastAccessed
+      ))
+      .sorted(Comparator.comparing(AdminDtos.ResourceAccessRow::lastAccessedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+      .toList();
+  }
+
   public List<AdminDtos.DemonstrationSiteDto> adminSites() {
     authContextService.requireContentManager();
     return demonstrationSiteRepository.findAll(Sort.by("name")).stream()

@@ -1,0 +1,29 @@
+# Build output
+target/
+*.class
+
+# Runtime data — never belongs in version control
+backups/
+storage/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# JVM crash artifacts
+hs_err_pid*.log
+replay_pid*.log
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db

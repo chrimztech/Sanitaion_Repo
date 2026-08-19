@@ -7,11 +7,15 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
@@ -21,6 +25,8 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @Service
 public class BackupService {
 
+  private static final Logger log = LoggerFactory.getLogger(BackupService.class);
+
   private static final DateTimeFormatter TS =
     DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneId.systemDefault());
 
@@ -29,6 +35,7 @@ public class BackupService {
   private final String dbUrl;
   private final String dbUsername;
   private final String dbPassword;
+  private final int retentionDays;
   private final AuthContextService authContextService;
 
   public BackupService(
@@ -37,6 +44,7 @@ public class BackupService {
     @Value("${spring.datasource.url}") String dbUrl,
     @Value("${spring.datasource.username}") String dbUsername,
     @Value("${spring.datasource.password}") String dbPassword,
+    @Value("${app.backup.retention-days:30}") int retentionDays,
     AuthContextService authContextService
   ) throws IOException {
     this.backupDir = Path.of(backupDir).toAbsolutePath();
@@ -44,8 +52,46 @@ public class BackupService {
     this.dbUrl = dbUrl;
     this.dbUsername = dbUsername;
     this.dbPassword = dbPassword;
+    this.retentionDays = retentionDays;
     this.authContextService = authContextService;
     Files.createDirectories(this.backupDir);
+  }
+
+  // Runs daily at 02:00 server time — an unattended safety net on top of the
+  // admin-triggered backups, since nothing else was ensuring a backup exists
+  // if nobody remembers to click the button.
+  @Scheduled(cron = "0 0 2 * * *")
+  public void runScheduledBackup() {
+    try {
+      AdminDtos.BackupDto created = createFullBackupInternal();
+      log.info("Scheduled backup completed: {}", created.filename());
+    } catch (Exception e) {
+      log.error("Scheduled backup failed", e);
+    }
+    try {
+      pruneExpired();
+    } catch (Exception e) {
+      log.error("Backup retention cleanup failed", e);
+    }
+  }
+
+  private void pruneExpired() {
+    if (retentionDays <= 0) return;
+    Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
+    try {
+      if (!Files.exists(backupDir)) return;
+      try (var stream = Files.list(backupDir)) {
+        for (Path p : stream.filter(f -> !Files.isDirectory(f)).toList()) {
+          Instant modified = Files.getLastModifiedTime(p).toInstant();
+          if (modified.isBefore(cutoff)) {
+            Files.delete(p);
+            log.info("Pruned expired backup: {}", p.getFileName());
+          }
+        }
+      }
+    } catch (IOException e) {
+      log.error("Failed to prune expired backups", e);
+    }
   }
 
   public List<AdminDtos.BackupDto> list() {
@@ -68,6 +114,20 @@ public class BackupService {
 
   public AdminDtos.BackupDto createDatabaseBackup() {
     authContextService.requireAdmin();
+    return createDatabaseBackupInternal();
+  }
+
+  public AdminDtos.BackupDto createFilesBackup() {
+    authContextService.requireAdmin();
+    return createFilesBackupInternal();
+  }
+
+  public AdminDtos.BackupDto createFullBackup() {
+    authContextService.requireAdmin();
+    return createFullBackupInternal();
+  }
+
+  private AdminDtos.BackupDto createDatabaseBackupInternal() {
     String timestamp = TS.format(Instant.now());
     Path out = backupDir.resolve("db_" + timestamp + ".sql");
     DbParams db = parseJdbcUrl(dbUrl);
@@ -75,16 +135,14 @@ public class BackupService {
     return toDto(out);
   }
 
-  public AdminDtos.BackupDto createFilesBackup() {
-    authContextService.requireAdmin();
+  private AdminDtos.BackupDto createFilesBackupInternal() {
     String timestamp = TS.format(Instant.now());
     Path out = backupDir.resolve("files_" + timestamp + ".zip");
     zipDirectory(storageRoot, out);
     return toDto(out);
   }
 
-  public AdminDtos.BackupDto createFullBackup() {
-    authContextService.requireAdmin();
+  private AdminDtos.BackupDto createFullBackupInternal() {
     String timestamp = TS.format(Instant.now());
     Path dbFile = backupDir.resolve("_tmp_db_" + timestamp + ".sql");
     DbParams db = parseJdbcUrl(dbUrl);

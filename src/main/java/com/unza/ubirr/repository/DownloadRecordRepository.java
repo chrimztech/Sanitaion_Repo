@@ -18,4 +18,8 @@ public interface DownloadRecordRepository extends JpaRepository<DownloadRecord, 
 
   @Query("SELECT d.contentFile.contentItem.id, COUNT(d) FROM DownloadRecord d GROUP BY d.contentFile.contentItem.id")
   List<Object[]> countGroupedByContentItem();
+
+  @Query("SELECT d.contentFile.contentItem.id, d.contentFile.contentItem.title, d.user.id, d.user.fullName, d.user.email, COUNT(d), MAX(d.downloadedAt) "
+    + "FROM DownloadRecord d GROUP BY d.contentFile.contentItem.id, d.contentFile.contentItem.title, d.user.id, d.user.fullName, d.user.email")
+  List<Object[]> countGroupedByContentItemAndUser();
 }

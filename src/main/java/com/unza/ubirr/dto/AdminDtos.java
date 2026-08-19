@@ -383,6 +383,18 @@ public final class AdminDtos {
   ) {
   }
 
+  public record ResourceAccessRow(
+    UUID contentItemId,
+    String resourceTitle,
+    UUID userId,
+    String userName,
+    String userEmail,
+    long viewCount,
+    long downloadCount,
+    Instant lastAccessedAt
+  ) {
+  }
+
   public record ReportsDto(
     long totalResources,
     long publishedResources,
