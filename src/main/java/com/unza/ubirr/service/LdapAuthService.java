@@ -155,6 +155,12 @@ public class LdapAuthService {
       source.setUserDn(ldapProperties.getManagerDn());
       source.setPassword(ldapProperties.getManagerPassword());
     }
+    // Without explicit timeouts, an unreachable/slow LDAP server can hang the JNDI call for
+    // minutes (OS-level TCP timeout), blocking the login request thread.
+    source.setBaseEnvironmentProperties(java.util.Map.<String, Object>of(
+      "com.sun.jndi.ldap.connect.timeout", "5000",
+      "com.sun.jndi.ldap.read.timeout", "10000"
+    ));
     try {
       source.afterPropertiesSet();
     } catch (Exception e) {

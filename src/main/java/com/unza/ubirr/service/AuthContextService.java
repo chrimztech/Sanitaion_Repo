@@ -30,6 +30,15 @@ public class AuthContextService {
     return appUserRepository.findByIdWithRoles(principal.id());
   }
 
+  /**
+   * Cheap authentication check (no DB round-trip) for call sites that only need to know
+   * whether a request is authenticated — e.g. cache-key computation — not the full user/roles.
+   */
+  public boolean isAuthenticated() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    return authentication != null && authentication.getPrincipal() instanceof UserPrincipal;
+  }
+
   public AppUser requireUser() {
     return currentUser().orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Authentication required"));
   }

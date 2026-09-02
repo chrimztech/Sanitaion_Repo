@@ -14,10 +14,17 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+/**
+ * Report generation is split into a short read-only transaction (fetchData) that holds a
+ * Hikari connection only long enough to run the queries, followed by CPU-bound iText rendering
+ * (buildPdf) with no transaction/connection held at all. Previously the whole class was
+ * {@code @Transactional}, so a Hikari connection sat checked out for the entire PDF render —
+ * under concurrent report requests that could starve the pool (max 20) for public traffic too.
+ */
 @Service
-@Transactional(readOnly = true)
 public class ReportPdfService {
 
   private static final Color GREEN_DARK  = new Color(10, 52, 26);
@@ -43,6 +50,7 @@ public class ReportPdfService {
   private final DownloadRecordRepository downloadRecordRepository;
   private final ContentFileRepository contentFileRepository;
   private final DigitizationRecordRepository digitizationRecordRepository;
+  private final TransactionTemplate transactionTemplate;
 
   public ReportPdfService(
       AuthContextService authContextService,
@@ -55,7 +63,8 @@ public class ReportPdfService {
       ViewRecordRepository viewRecordRepository,
       DownloadRecordRepository downloadRecordRepository,
       ContentFileRepository contentFileRepository,
-      DigitizationRecordRepository digitizationRecordRepository
+      DigitizationRecordRepository digitizationRecordRepository,
+      PlatformTransactionManager transactionManager
   ) {
     this.authContextService = authContextService;
     this.contentItemRepository = contentItemRepository;
@@ -68,13 +77,39 @@ public class ReportPdfService {
     this.downloadRecordRepository = downloadRecordRepository;
     this.contentFileRepository = contentFileRepository;
     this.digitizationRecordRepository = digitizationRecordRepository;
+    this.transactionTemplate = new TransactionTemplate(transactionManager);
+    this.transactionTemplate.setReadOnly(true);
   }
+
+  private record ReportData(
+      List<ContentItem> items,
+      List<ContentFile> files,
+      long totalBytes,
+      Map<UUID, Long> viewsByItem,
+      Map<UUID, Long> downloadsByItem,
+      long totalViews,
+      long totalDl,
+      long userCount,
+      List<AppUser> users,
+      long eventCount,
+      List<EventEntity> events,
+      List<TrainingSession> trainingSessions,
+      Map<UUID, Long> trainingRegCounts,
+      List<DemonstrationSite> sites
+  ) {}
 
   public byte[] generate() {
     authContextService.requireAdmin();
+    ReportData data = transactionTemplate.execute(status -> fetchData());
+    return buildPdf(data);
+  }
 
-    // Pre-fetch aggregates
-    List<ContentItem> items = contentItemRepository.findAll();
+  private ReportData fetchData() {
+    // findAllForAdmin() fetch-joins author/category/department, and findAllWithRolesOrderByCreatedAtAsc()
+    // fetch-joins roles below — buildPdf() runs after this transaction (and its Hibernate
+    // session) has closed, so any lazy association it touched would throw
+    // LazyInitializationException instead of a plain query.
+    List<ContentItem> items = contentItemRepository.findAllForAdmin();
     List<ContentFile> files = contentFileRepository.findAll();
     long totalBytes = files.stream().mapToLong(f -> f.fileSize != null ? f.fileSize : 0L).sum();
 
@@ -86,6 +121,29 @@ public class ReportPdfService {
     for (Object[] row : downloadRecordRepository.countGroupedByContentItem()) {
       downloadsByItem.put((UUID) row[0], (Long) row[1]);
     }
+
+    List<TrainingSession> trainingSessions = trainingSessionRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+    Map<UUID, Long> trainingRegCounts = new HashMap<>();
+    for (TrainingSession s : trainingSessions) {
+      trainingRegCounts.put(s.id, trainingRegistrationRepository.countActiveBySessionId(s.id));
+    }
+
+    return new ReportData(
+      items, files, totalBytes, viewsByItem, downloadsByItem,
+      viewRecordRepository.count(), downloadRecordRepository.count(),
+      appUserRepository.count(), appUserRepository.findAllWithRolesOrderByCreatedAtAsc(),
+      eventRepository.count(), eventRepository.findAll(Sort.by(Sort.Direction.DESC, "startDate")),
+      trainingSessions, trainingRegCounts,
+      demonstrationSiteRepository.findAll(Sort.by("name"))
+    );
+  }
+
+  private byte[] buildPdf(ReportData data) {
+    List<ContentItem> items = data.items();
+    List<ContentFile> files = data.files();
+    long totalBytes = data.totalBytes();
+    Map<UUID, Long> viewsByItem = data.viewsByItem();
+    Map<UUID, Long> downloadsByItem = data.downloadsByItem();
 
     // Load logo from classpath
     byte[] logoBytes = null;
@@ -134,8 +192,8 @@ public class ReportPdfService {
       long pending   = items.stream().filter(i -> i.status == ContentStatus.SUBMITTED).count();
       long drafts    = items.stream().filter(i -> i.status == ContentStatus.DRAFT).count();
       long archived  = items.stream().filter(i -> i.status == ContentStatus.ARCHIVED).count();
-      long totalViews = viewRecordRepository.count();
-      long totalDl    = downloadRecordRepository.count();
+      long totalViews = data.totalViews();
+      long totalDl    = data.totalDl();
 
       PdfPTable cards = new PdfPTable(6);
       cards.setWidthPercentage(100);
@@ -143,7 +201,7 @@ public class ReportPdfService {
       addCard(cards, "Total Resources", String.valueOf(items.size()), valueFont, labelFont);
       addCard(cards, "Published", String.valueOf(published), valueFont, labelFont);
       addCard(cards, "Pending Approval", String.valueOf(pending), valueFont, labelFont);
-      addCard(cards, "Registered Users", String.valueOf(appUserRepository.count()), valueFont, labelFont);
+      addCard(cards, "Registered Users", String.valueOf(data.userCount()), valueFont, labelFont);
       addCard(cards, "Total Views", String.valueOf(totalViews), valueFont, labelFont);
       addCard(cards, "Total Downloads", String.valueOf(totalDl), valueFont, labelFont);
       doc.add(cards);
@@ -153,8 +211,8 @@ public class ReportPdfService {
       cards2.setSpacingAfter(16);
       addCard(cards2, "Drafts", String.valueOf(drafts), valueFont, labelFont);
       addCard(cards2, "Archived", String.valueOf(archived), valueFont, labelFont);
-      addCard(cards2, "Events", String.valueOf(eventRepository.count()), valueFont, labelFont);
-      addCard(cards2, "Training Sessions", String.valueOf(trainingSessionRepository.count()), valueFont, labelFont);
+      addCard(cards2, "Events", String.valueOf(data.eventCount()), valueFont, labelFont);
+      addCard(cards2, "Training Sessions", String.valueOf(data.trainingSessions().size()), valueFont, labelFont);
       addCard(cards2, "Files Stored (" + formatBytes(totalBytes) + ")", String.valueOf(files.size()), valueFont, labelFont);
       doc.add(cards2);
 
@@ -205,7 +263,7 @@ public class ReportPdfService {
       userTable.setSpacingAfter(14);
       addTableHeader(userTable, hdrFont, "Full Name", "Email", "Roles", "Status", "Auth Type", "Registered");
       alt = false;
-      for (AppUser u : appUserRepository.findAll(Sort.by("createdAt"))) {
+      for (AppUser u : data.users()) {
         String roles = u.roles.stream()
             .map(r -> r.role.name())
             .collect(java.util.stream.Collectors.joining(", "));
@@ -228,7 +286,7 @@ public class ReportPdfService {
       evTable.setSpacingAfter(14);
       addTableHeader(evTable, hdrFont, "Title", "Status", "Start Date", "End Date", "Venue", "Organizer");
       alt = false;
-      for (EventEntity ev : eventRepository.findAll(Sort.by(Sort.Direction.DESC, "startDate"))) {
+      for (EventEntity ev : data.events()) {
         addRow(evTable, bodyFont, alt,
             ev.title,
             capitalize(ev.status.apiValue()),
@@ -248,8 +306,8 @@ public class ReportPdfService {
       trainTable.setSpacingAfter(14);
       addTableHeader(trainTable, hdrFont, "Title", "Mode", "Status", "Start Date", "Venue", "Capacity", "Registrations");
       alt = false;
-      for (TrainingSession s : trainingSessionRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))) {
-        long regCount = trainingRegistrationRepository.countActiveBySessionId(s.id);
+      for (TrainingSession s : data.trainingSessions()) {
+        long regCount = data.trainingRegCounts().getOrDefault(s.id, 0L);
         addRow(trainTable, bodyFont, alt,
             s.title,
             s.mode   != null ? capitalize(s.mode) : "—",
@@ -270,7 +328,7 @@ public class ReportPdfService {
       siteTable.setSpacingAfter(14);
       addTableHeader(siteTable, hdrFont, "Name", "Type", "Status", "District", "Location", "Since");
       alt = false;
-      for (DemonstrationSite site : demonstrationSiteRepository.findAll(Sort.by("name"))) {
+      for (DemonstrationSite site : data.sites()) {
         addRow(siteTable, bodyFont, alt,
             site.name,
             site.siteType          != null ? site.siteType          : "—",

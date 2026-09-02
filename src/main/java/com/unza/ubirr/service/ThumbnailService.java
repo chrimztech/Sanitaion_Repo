@@ -1,11 +1,13 @@
 package com.unza.ubirr.service;
 
 import com.unza.ubirr.config.StorageProperties;
+import com.unza.ubirr.repository.ContentItemRepository;
 import net.coobird.thumbnailator.Thumbnails;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.awt.image.BufferedImage;
@@ -47,12 +49,27 @@ public class ThumbnailService {
 
   private final Path root;
   private final String ffmpegPath;
+  private final ContentItemRepository contentItemRepository;
 
   public ThumbnailService(StorageProperties properties,
-                          @Value("${app.ffmpeg.path:ffmpeg}") String ffmpegPath) throws IOException {
+                          @Value("${app.ffmpeg.path:ffmpeg}") String ffmpegPath,
+                          ContentItemRepository contentItemRepository) throws IOException {
     this.root = Path.of(properties.getRoot()).toAbsolutePath().normalize();
     this.ffmpegPath = ffmpegPath;
+    this.contentItemRepository = contentItemRepository;
     Files.createDirectories(root.resolve("thumbnails"));
+  }
+
+  /**
+   * Fire-and-forget variant used from upload request paths: thumbnail rendering (PDF page
+   * rasterization, FFmpeg frame extraction) can take seconds and previously ran inline,
+   * blocking the HTTP response. Runs on the async executor and attaches the result via an
+   * atomic UPDATE (only if no thumbnail was set in the meantime) once generation finishes.
+   */
+  @Async
+  public void generateAndAttachAsync(Path sourceFile, String mimeType, UUID contentId) {
+    generate(sourceFile, mimeType, contentId)
+      .ifPresent(path -> contentItemRepository.setThumbnailIfAbsent(contentId, path));
   }
 
   /**

@@ -10,6 +10,7 @@ storage/
 .env
 .env.*
 !.env.example
+config/
 
 # JVM crash artifacts
 hs_err_pid*.log

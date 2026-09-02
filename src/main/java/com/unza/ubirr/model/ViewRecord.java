@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -13,7 +14,14 @@ import java.time.Instant;
 import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
-@Table(name = "views")
+@Table(
+  name = "views",
+  indexes = {
+    @Index(name = "idx_views_content_item_id", columnList = "content_item_id"),
+    @Index(name = "idx_views_user_id", columnList = "user_id"),
+    @Index(name = "idx_views_viewed_at", columnList = "viewed_at")
+  }
+)
 public class ViewRecord {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -14,7 +15,14 @@ import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
-@Table(name = "audit_logs")
+@Table(
+  name = "audit_logs",
+  indexes = {
+    @Index(name = "idx_audit_user_id", columnList = "user_id"),
+    @Index(name = "idx_audit_created_at", columnList = "created_at"),
+    @Index(name = "idx_audit_entity", columnList = "entity_type,entity_id")
+  }
+)
 public class AuditLog {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)

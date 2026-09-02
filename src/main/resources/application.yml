@@ -6,6 +6,14 @@ server:
     min-response-size: 1024
   error:
     include-message: always
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
+    accept-count: 100
+    # Note: raising this further doesn't help DB-bound requests beyond the Hikari pool size
+    # (20 connections) below — it mainly gives headroom for concurrent large file transfers.
+    max-connections: 10000
 
 spring:
   application:

@@ -10,14 +10,22 @@ import com.unza.ubirr.repository.HeroBannerRepository;
 import com.unza.ubirr.service.PublicService;
 import com.unza.ubirr.service.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -41,29 +49,26 @@ public class FileController {
   }
 
   @GetMapping("/{fileId}/preview")
-  public ResponseEntity<Resource> preview(@PathVariable UUID fileId) {
+  public ResponseEntity<ResourceRegion> preview(@PathVariable UUID fileId, @RequestHeader HttpHeaders requestHeaders) {
     ContentFile file = publicService.fileForPreview(fileId);
     Resource resource = storageService.load(file.filePath);
     MediaType mediaType = storageService.mediaType(file.originalFileName, file.mimeType);
-    return ResponseEntity.ok()
-      .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(file.originalFileName).build().toString())
-      .body(resource);
+    ContentDisposition disposition = ContentDisposition.inline().filename(file.originalFileName).build();
+    // Gated by fileForPreview's access rules, so cache per-browser only (not on a shared/CDN cache).
+    return serveResource(resource, mediaType, requestHeaders, disposition, CacheControl.maxAge(Duration.ofHours(1)).cachePrivate(), file.checksum);
   }
 
   @GetMapping("/{fileId}/download")
-  public ResponseEntity<Resource> download(@PathVariable UUID fileId, HttpServletRequest request) {
+  public ResponseEntity<ResourceRegion> download(@PathVariable UUID fileId, HttpServletRequest request, @RequestHeader HttpHeaders requestHeaders) {
     ContentFile file = publicService.fileForDownload(fileId, request.getRemoteAddr());
     Resource resource = storageService.load(file.filePath);
     MediaType mediaType = storageService.mediaType(file.originalFileName, file.mimeType);
-    return ResponseEntity.ok()
-      .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(file.originalFileName).build().toString())
-      .body(resource);
+    ContentDisposition disposition = ContentDisposition.attachment().filename(file.originalFileName).build();
+    return serveResource(resource, mediaType, requestHeaders, disposition, CacheControl.maxAge(Duration.ofHours(1)).cachePrivate(), file.checksum);
   }
 
   @GetMapping("/thumbnail/{contentId}")
-  public ResponseEntity<Resource> thumbnail(@PathVariable UUID contentId) {
+  public ResponseEntity<ResourceRegion> thumbnail(@PathVariable UUID contentId, @RequestHeader HttpHeaders requestHeaders) {
     ContentItem item = contentItemRepository.findById(contentId)
       .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
     if (item.thumbnailPath == null) {
@@ -71,10 +76,42 @@ public class FileController {
     }
     Resource resource = storageService.load(item.thumbnailPath);
     MediaType mediaType = storageService.mediaType(item.thumbnailPath, null);
-    return ResponseEntity.ok()
+    ContentDisposition disposition = ContentDisposition.inline().filename("thumbnail").build();
+    // Thumbnails aren't access-gated and rarely change once generated — safe to cache publicly.
+    return serveResource(resource, mediaType, requestHeaders, disposition, CacheControl.maxAge(Duration.ofHours(6)).cachePublic(), null);
+  }
+
+  /**
+   * Serves a Resource with HTTP Range support (206 partial content) so video/PDF preview can
+   * seek and large downloads can resume, plus Cache-Control/ETag so browsers stop re-fetching
+   * unchanged files on every view.
+   */
+  private ResponseEntity<ResourceRegion> serveResource(
+    Resource resource, MediaType mediaType, HttpHeaders requestHeaders,
+    ContentDisposition disposition, CacheControl cacheControl, String etag
+  ) {
+    long contentLength;
+    try {
+      contentLength = resource.contentLength();
+    } catch (IOException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found on disk");
+    }
+
+    List<HttpRange> ranges = requestHeaders.getRange();
+    ResourceRegion region = ranges.isEmpty()
+      ? new ResourceRegion(resource, 0, contentLength)
+      : ranges.get(0).toResourceRegion(resource);
+
+    ResponseEntity.BodyBuilder builder = ResponseEntity
+      .status(ranges.isEmpty() ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
       .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("thumbnail").build().toString())
-      .body(resource);
+      .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+      .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+      .cacheControl(cacheControl);
+    if (etag != null && !etag.isBlank()) {
+      builder = builder.eTag(etag);
+    }
+    return builder.body(region);
   }
 
   @GetMapping("/site/{siteId}/image")

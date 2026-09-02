@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -13,7 +14,14 @@ import java.time.Instant;
 import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
-@Table(name = "downloads")
+@Table(
+  name = "downloads",
+  indexes = {
+    @Index(name = "idx_downloads_content_file_id", columnList = "content_file_id"),
+    @Index(name = "idx_downloads_user_id", columnList = "user_id"),
+    @Index(name = "idx_downloads_downloaded_at", columnList = "downloaded_at")
+  }
+)
 public class DownloadRecord {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)

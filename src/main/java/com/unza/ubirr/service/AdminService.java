@@ -337,17 +337,15 @@ public class AdminService {
     file.accessLevel = item.accessLevel;
     file = contentFileRepository.save(file);
 
-    // Auto-generate thumbnail if this item doesn't have one yet
+    // Auto-generate thumbnail if this item doesn't have one yet. Runs off the request thread —
+    // PDF/video thumbnail rendering can take seconds and previously blocked the upload response.
     if (item.thumbnailPath == null) {
       try {
-        thumbnailService.generate(
+        thumbnailService.generateAndAttachAsync(
           storageService.load(storedFile.relativePath()).getFile().toPath(),
           storedFile.mimeType(),
           contentId
-        ).ifPresent(thumbRelPath -> {
-          item.thumbnailPath = thumbRelPath;
-          contentItemRepository.save(item);
-        });
+        );
       } catch (Exception ignored) {
         // Thumbnail is non-critical; continue if it fails
       }
@@ -1112,16 +1110,12 @@ public class AdminService {
       } catch (Exception ignored) {}
       contentFileRepository.save(cf);
 
-      // Auto-generate thumbnail (e.g. PDF first page)
+      // Auto-generate thumbnail (e.g. PDF first page) — off the request thread, see uploadContentFile.
       try {
-        final ContentItem savedItem = item;
-        thumbnailService.generate(
+        thumbnailService.generateAndAttachAsync(
           storageService.load(rec.scannedFilePath).getFile().toPath(),
-          cf.mimeType, savedItem.id
-        ).ifPresent(thumbPath -> {
-          savedItem.thumbnailPath = thumbPath;
-          contentItemRepository.save(savedItem);
-        });
+          cf.mimeType, item.id
+        );
       } catch (Exception ignored) {}
     }
 

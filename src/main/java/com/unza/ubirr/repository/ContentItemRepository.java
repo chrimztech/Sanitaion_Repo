@@ -17,6 +17,14 @@ public interface ContentItemRepository extends JpaRepository<ContentItem, UUID>,
   @Query("UPDATE ContentItem c SET c.author = null WHERE c.author.id = :userId")
   void nullifyAuthor(@Param("userId") UUID userId);
 
+  @Modifying
+  @Query("UPDATE ContentItem c SET c.viewCount = c.viewCount + 1 WHERE c.id = :id")
+  int incrementViewCount(@Param("id") UUID id);
+
+  @Modifying
+  @Query("UPDATE ContentItem c SET c.thumbnailPath = :path WHERE c.id = :id AND c.thumbnailPath IS NULL")
+  int setThumbnailIfAbsent(@Param("id") UUID id, @Param("path") String path);
+
   @Query("SELECT c FROM ContentItem c LEFT JOIN FETCH c.category LEFT JOIN FETCH c.department LEFT JOIN FETCH c.author ORDER BY c.updatedAt DESC")
   List<ContentItem> findAllForAdmin();
 

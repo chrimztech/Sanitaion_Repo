@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ContentFileRepository extends JpaRepository<ContentFile, UUID> {
   List<ContentFile> findByContentItem_IdOrderByCreatedAtAsc(UUID contentItemId);
+
+  List<ContentFile> findByContentItem_IdInOrderByCreatedAtAsc(List<UUID> contentItemIds);
 }

@@ -21,4 +21,7 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
 
   @Query("SELECT u FROM AppUser u LEFT JOIN FETCH u.roles ORDER BY u.createdAt DESC")
   List<AppUser> findAllWithRoles();
+
+  @Query("SELECT u FROM AppUser u LEFT JOIN FETCH u.roles ORDER BY u.createdAt ASC")
+  List<AppUser> findAllWithRolesOrderByCreatedAtAsc();
 }

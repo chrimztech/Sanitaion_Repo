@@ -32,7 +32,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -45,6 +48,12 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 @Service
 @Transactional
 public class PublicService {
+  // Self-injected proxy so @Cacheable is honored on calls made from within this same class
+  // (Spring's cache/AOP proxy only intercepts calls that come in from other beans).
+  @Lazy
+  @Autowired
+  private PublicService self;
+
   private final ContentItemRepository contentItemRepository;
   private final ContentFileRepository contentFileRepository;
   private final EventRepository eventRepository;
@@ -88,9 +97,9 @@ public class PublicService {
 
   @Cacheable("public-home")
   public PublicDtos.HomeResponse home() {
-    List<PublicDtos.ResourceSummaryDto> resources = contentItemRepository
+    List<PublicDtos.ResourceSummaryDto> resources = summarizeAll(contentItemRepository
       .findAll(publicContentSpec(null, null, null), PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "publishedAt")))
-      .getContent().stream().map(this::summary).toList();
+      .getContent());
 
     List<PublicDtos.EventDto> events = eventRepository.findAll().stream()
       .filter(event -> event.status == ContentStatus.PUBLISHED && event.accessLevel == AccessLevel.PUBLIC)
@@ -146,8 +155,13 @@ public class PublicService {
     return publicResources(query, type, category, null);
   }
 
+  // Cached — this is the highest-traffic read (library browse/search). Key must include the
+  // logged-in flag: browse results differ (UNIVERSITY-level items are only included for
+  // authenticated users), so caching without it would leak gated content to anonymous users.
+  @Cacheable(value = "public-resources",
+    key = "(#query == null ? '' : #query) + '|' + #type + '|' + (#category == null ? '' : #category) + '|' + #departmentId + '|' + @authContextService.isAuthenticated()")
   public List<PublicDtos.ResourceSummaryDto> publicResources(String query, String type, String category, UUID departmentId) {
-    boolean loggedIn = authContextService.currentUser().isPresent();
+    boolean loggedIn = authContextService.isAuthenticated();
     String contentType = null;
     if (type != null && !type.isBlank() && !"all".equalsIgnoreCase(type)) {
       contentType = type.trim().toLowerCase().replace('-', '_');
@@ -155,19 +169,19 @@ public class PublicService {
 
     // Use GIN-indexed FTS with relevance ranking when a search query is present
     if (query != null && !query.isBlank()) {
-      return contentItemRepository.fullTextSearch(
+      return summarizeAll(contentItemRepository.fullTextSearch(
           query,
           (category != null && !category.isBlank()) ? category : null,
           contentType,
           departmentId != null ? departmentId.toString() : null
-        ).stream().map(this::summary).toList();
+        ));
     }
 
     // No query — standard JPA Specification (date-ordered browse)
-    return contentItemRepository.findAll(
+    return summarizeAll(contentItemRepository.findAll(
         publicContentSpec(null, contentType, category, departmentId, loggedIn),
         PageRequest.of(0, 60, Sort.by(Sort.Direction.DESC, "publishedAt"))
-      ).getContent().stream().map(this::summary).toList();
+      ).getContent());
   }
 
   @Cacheable("public-departments")
@@ -178,21 +192,29 @@ public class PublicService {
   }
 
   public PublicDtos.ResourceDetailDto resourceBySlug(String slug) {
-    ContentItem item = contentItemRepository.findBySlug(slug).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
-    if (!canAccess(item, authContextService.currentUser().orElse(null))) {
+    // Access check runs on every request (uncached) — only the expensive DTO assembly below
+    // is cached, so a cache hit can never bypass the permission gate.
+    ContentItem gate = contentItemRepository.findBySlug(slug).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
+    if (!canAccess(gate, authContextService.currentUser().orElse(null))) {
       throw new ResponseStatusException(NOT_FOUND, "Resource not found");
     }
+    return self.cachedResourceDetail(gate.id);
+  }
+
+  @Cacheable("public-resource")
+  public PublicDtos.ResourceDetailDto cachedResourceDetail(UUID itemId) {
+    ContentItem item = contentItemRepository.findById(itemId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
 
     List<ContentFile> files = contentFileRepository.findByContentItem_IdOrderByCreatedAtAsc(item.id);
     List<PublicDtos.ContentFileDto> fileDtos = files.stream().map(this::fileDto).toList();
 
     List<PublicDtos.ResourceSummaryDto> related = item.category == null
       ? List.of()
-      : contentItemRepository.findAll(publicContentSpec(null, null, item.category.slug), PageRequest.of(0, 8, Sort.by(Sort.Direction.DESC, "publishedAt"))).getContent().stream()
+      : summarizeAll(contentItemRepository.findAll(publicContentSpec(null, null, item.category.slug), PageRequest.of(0, 8, Sort.by(Sort.Direction.DESC, "publishedAt"))).getContent().stream()
         .filter(candidate -> !candidate.id.equals(item.id))
         .limit(4)
-        .map(this::summary)
-        .toList();
+        .toList());
 
     PublicDtos.CategoryDto categoryDto = item.category == null
       ? null
@@ -277,10 +299,9 @@ public class PublicService {
 
   @Cacheable("public-gallery")
   public List<PublicDtos.ResourceSummaryDto> gallery() {
-    return contentItemRepository.findAll(publicContentSpec(null, null, null), PageRequest.of(0, 120, Sort.by(Sort.Direction.DESC, "publishedAt"))).getContent().stream()
+    return summarizeAll(contentItemRepository.findAll(publicContentSpec(null, null, null), PageRequest.of(0, 120, Sort.by(Sort.Direction.DESC, "publishedAt"))).getContent().stream()
       .filter(item -> "image".equals(item.contentType) || "gallery".equals(item.contentType))
-      .map(this::summary)
-      .toList();
+      .toList());
   }
 
   public void recordView(UUID contentId, String ipAddress) {
@@ -290,8 +311,9 @@ public class PublicService {
     viewRecord.user = authContextService.currentUser().orElse(null);
     viewRecord.ipAddress = ipAddress;
     viewRecordRepository.save(viewRecord);
-    item.viewCount = item.viewCount + 1;
-    contentItemRepository.save(item);
+    // Atomic UPDATE instead of read-modify-write — avoids lost increments when the same
+    // popular item is viewed concurrently by many users.
+    contentItemRepository.incrementViewCount(contentId);
   }
 
   public ContentFile fileForPreview(UUID fileId) {
@@ -371,9 +393,37 @@ public class PublicService {
   }
 
   public PublicDtos.ResourceSummaryDto summary(ContentItem item) {
+    return summary(item, null);
+  }
+
+  // Batches the per-item "find a fallback thumbnail" lookup into a single query instead of
+  // one query per row (the previous code issued findByContentItem_Id for every item in a
+  // listing that had no explicit thumbnailPath — up to ~60-120 extra queries per page load).
+  private List<PublicDtos.ResourceSummaryDto> summarizeAll(List<ContentItem> items) {
+    List<UUID> needsFallbackThumbnail = items.stream()
+      .filter(item -> item.thumbnailPath == null)
+      .map(item -> item.id)
+      .toList();
+
+    Map<UUID, String> fallbackThumbnails = needsFallbackThumbnail.isEmpty()
+      ? Map.of()
+      : contentFileRepository.findByContentItem_IdInOrderByCreatedAtAsc(needsFallbackThumbnail).stream()
+          .filter(file -> file.mimeType != null && file.mimeType.startsWith("image/"))
+          .collect(Collectors.toMap(
+            file -> file.contentItem.id,
+            file -> "/api/files/" + file.id + "/preview",
+            (firstByCreatedAt, ignored) -> firstByCreatedAt
+          ));
+
+    return items.stream().map(item -> summary(item, fallbackThumbnails)).toList();
+  }
+
+  private PublicDtos.ResourceSummaryDto summary(ContentItem item, Map<UUID, String> fallbackThumbnails) {
     String thumbnail;
     if (item.thumbnailPath != null) {
       thumbnail = "/api/files/thumbnail/" + item.id;
+    } else if (fallbackThumbnails != null) {
+      thumbnail = fallbackThumbnails.get(item.id);
     } else {
       List<ContentFile> files = contentFileRepository.findByContentItem_IdOrderByCreatedAtAsc(item.id);
       thumbnail = files.stream()
