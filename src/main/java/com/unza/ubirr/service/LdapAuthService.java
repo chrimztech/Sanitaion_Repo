@@ -135,6 +135,9 @@ public class LdapAuthService {
     role.user = user;
     role.role = AppRole.STAFF;
     userRoleRepository.save(role);
+    // See OapAuthService for why this line matters — keeps AppUser.roles in sync so the
+    // login response built later in this same request isn't built from a stale empty set.
+    user.roles.add(role);
 
     Notification welcome = new Notification();
     welcome.user = user;

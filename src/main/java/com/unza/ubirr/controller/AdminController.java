@@ -303,6 +303,16 @@ public class AdminController {
     return backupService.list();
   }
 
+  @GetMapping("/backup/location")
+  public AdminDtos.BackupLocationDto backupLocation() {
+    return backupService.currentLocation();
+  }
+
+  @PutMapping("/backup/location")
+  public AdminDtos.BackupLocationDto updateBackupLocation(@RequestBody AdminDtos.UpdateBackupLocationRequest request) {
+    return backupService.updateBackupLocation(request);
+  }
+
   @PostMapping("/backup/database")
   public AdminDtos.BackupDto backupDatabase() {
     return backupService.createDatabaseBackup();
@@ -334,6 +344,11 @@ public class AdminController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void deleteBackup(@PathVariable String filename) {
     backupService.delete(filename);
+  }
+
+  @PostMapping("/backup/{filename}/restore")
+  public AdminDtos.RestoreResultDto restoreBackup(@PathVariable String filename) {
+    return backupService.restore(filename);
   }
 
   @GetMapping("/sites")

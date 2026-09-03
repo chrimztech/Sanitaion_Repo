@@ -289,6 +289,27 @@ public final class AdminDtos {
   ) {
   }
 
+  public record BackupLocationDto(
+    String path,
+    boolean isDefault,
+    boolean writable
+  ) {
+  }
+
+  public record UpdateBackupLocationRequest(
+    // Blank/omitted resets to the default configured location (app.backup.dir)
+    String path
+  ) {
+  }
+
+  public record RestoreResultDto(
+    String filename,
+    boolean databaseRestored,
+    boolean filesRestored,
+    String message
+  ) {
+  }
+
   public record DemonstrationSiteDto(
     UUID id,
     String name,

@@ -136,6 +136,11 @@ public class OapAuthService {
     role.user = user;
     role.role = AppRole.STUDENT;
     userRoleRepository.save(role);
+    // Keep the in-memory side in sync — JPA doesn't auto-populate the inverse side of a
+    // @OneToMany, so without this the login response built later in this same request
+    // (authResponse -> findByIdWithRoles) returns the already-cached AppUser with an empty
+    // roles set, even though the role row was correctly saved.
+    user.roles.add(role);
 
     Notification welcome = new Notification();
     welcome.user = user;
