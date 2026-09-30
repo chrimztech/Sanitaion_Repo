@@ -120,7 +120,8 @@ public final class AdminDtos {
     String registrationLink,
     String accessLevel,
     String status,
-    Instant publishedAt
+    Instant publishedAt,
+    String bannerImageUrl
   ) {
   }
 
@@ -399,7 +400,8 @@ public final class AdminDtos {
     String status,
     Instant publishedAt,
     Instant createdAt,
-    long registrationCount
+    long registrationCount,
+    String imageUrl
   ) {
   }
 

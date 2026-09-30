@@ -21,4 +21,5 @@ public interface ReadingListItemRepository extends JpaRepository<ReadingListItem
   Optional<ReadingListItem> findByIdWithOwner(@Param("itemId") UUID itemId);
 
   void deleteByReadingList_Id(UUID readingListId);
+  void deleteByContentItem_Id(UUID contentItemId);
 }

@@ -64,6 +64,9 @@ public class TrainingSession {
   @Column
   public String contactEmail;
 
+  @Column
+  public String imagePath;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false)
   public ContentStatus status = ContentStatus.DRAFT;

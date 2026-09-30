@@ -85,7 +85,8 @@ public final class PublicDtos {
     String registrationLink,
     String accessLevel,
     String status,
-    Instant publishedAt
+    Instant publishedAt,
+    String bannerImageUrl
   ) {
   }
 
@@ -152,7 +153,8 @@ public final class PublicDtos {
     String contactEmail,
     String status,
     Instant publishedAt,
-    long registrationCount
+    long registrationCount,
+    String imageUrl
   ) {
   }
 }

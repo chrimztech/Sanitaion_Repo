@@ -125,7 +125,8 @@ public final class AccountDtos {
     String status,
     Instant publishedAt,
     long registrationCount,
-    boolean registered
+    boolean registered,
+    String imageUrl
   ) {
   }
 

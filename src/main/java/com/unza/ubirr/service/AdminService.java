@@ -35,6 +35,7 @@ import com.unza.ubirr.repository.AuditLogRepository;
 import com.unza.ubirr.repository.BookmarkRepository;
 import com.unza.ubirr.model.ContentTypeDef;
 import com.unza.ubirr.repository.ContentTypeDefRepository;
+import com.unza.ubirr.repository.ContentTagRepository;
 import com.unza.ubirr.repository.DemonstrationSiteRepository;
 import com.unza.ubirr.repository.SiteMonitoringRecordRepository;
 import com.unza.ubirr.model.SiteMonitoringRecord;
@@ -96,6 +97,7 @@ public class AdminService {
   private final ReadingListItemRepository readingListItemRepository;
   private final DemonstrationSiteRepository demonstrationSiteRepository;
   private final SiteMonitoringRecordRepository siteMonitoringRecordRepository;
+  private final ContentTagRepository contentTagRepository;
   private final HeroBannerRepository heroBannerRepository;
   private final ContentTypeDefRepository contentTypeDefRepository;
   private final TrainingSessionRepository trainingSessionRepository;
@@ -130,6 +132,7 @@ public class AdminService {
     ReadingListItemRepository readingListItemRepository,
     DemonstrationSiteRepository demonstrationSiteRepository,
     SiteMonitoringRecordRepository siteMonitoringRecordRepository,
+    ContentTagRepository contentTagRepository,
     HeroBannerRepository heroBannerRepository,
     ContentTypeDefRepository contentTypeDefRepository,
     TrainingSessionRepository trainingSessionRepository,
@@ -163,6 +166,7 @@ public class AdminService {
     this.readingListItemRepository = readingListItemRepository;
     this.demonstrationSiteRepository = demonstrationSiteRepository;
     this.siteMonitoringRecordRepository = siteMonitoringRecordRepository;
+    this.contentTagRepository = contentTagRepository;
     this.heroBannerRepository = heroBannerRepository;
     this.contentTypeDefRepository = contentTypeDefRepository;
     this.trainingSessionRepository = trainingSessionRepository;
@@ -406,14 +410,27 @@ public class AdminService {
     authContextService.requireAdmin();
     AppUser user = authContextService.requireUser();
     ContentItem item = contentItemRepository.findById(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
-    if (item.status != ContentStatus.DRAFT) {
-      throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Only draft content can be deleted. Archive published resources instead.");
-    }
+
+    // Administrators can permanently delete a resource regardless of status (drafts,
+    // published, archived, etc.) — content managers without admin rights should archive
+    // published resources instead, but this method is already admin-only above.
+    //
+    // Every table below has a NOT-NULL foreign key to content_items (or, for downloads,
+    // to content_files which cascades from it) — deleting the parent first without
+    // clearing these would violate those constraints and fail with a raw SQL error
+    // (the same class of bug fixed in the reading-list delete path).
+    downloadRecordRepository.deleteByContentFile_ContentItem_Id(id);
     List<ContentFile> files = contentFileRepository.findByContentItem_IdOrderByCreatedAtAsc(id);
     for (ContentFile f : files) {
       storageService.delete(f.filePath);
     }
     contentFileRepository.deleteAll(files);
+    bookmarkRepository.deleteByContentItem_Id(id);
+    readingListItemRepository.deleteByContentItem_Id(id);
+    viewRecordRepository.deleteByContentItem_Id(id);
+    approvalWorkflowRepository.deleteByContentItem_Id(id);
+    contentTagRepository.deleteByContentItem_Id(id);
+    digitizationRecordRepository.unlinkContentItem(id);
     contentItemRepository.delete(item);
     auditService.log(user, "content.delete", "content_items", id.toString());
   }
@@ -1129,8 +1146,21 @@ public class AdminService {
       event.registrationLink,
       event.accessLevel.apiValue(),
       event.status.apiValue(),
-      event.publishedAt
+      event.publishedAt,
+      event.bannerImagePath != null ? "/api/files/event/" + event.id + "/image" : null
     );
+  }
+
+  public String uploadEventImage(UUID id, MultipartFile file) {
+    authContextService.requireContentManager();
+    EventEntity event = eventRepository.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Event not found"));
+    if (event.bannerImagePath != null) {
+      storageService.delete(event.bannerImagePath);
+    }
+    event.bannerImagePath = storageService.storeEventImage(id, file);
+    eventRepository.save(event);
+    return "/api/files/event/" + id + "/image";
   }
 
   public AdminDtos.DigitizationDto advanceDigitizationStatus(UUID id, String newStatus) {
@@ -1386,8 +1416,21 @@ public class AdminService {
     return new AdminDtos.TrainingSessionDto(
       s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
       s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
-      s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt, s.createdAt, regCount
+      s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt, s.createdAt, regCount,
+      s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
     );
+  }
+
+  public String uploadTrainingImage(UUID id, MultipartFile file) {
+    authContextService.requireContentManager();
+    TrainingSession session = trainingSessionRepository.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Training session not found"));
+    if (session.imagePath != null) {
+      storageService.delete(session.imagePath);
+    }
+    session.imagePath = storageService.storeTrainingImage(id, file);
+    trainingSessionRepository.save(session);
+    return "/api/files/training/" + id + "/image";
   }
 
   public String generateReportCsv() {

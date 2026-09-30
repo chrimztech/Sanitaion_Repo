@@ -3,6 +3,8 @@ package com.unza.ubirr.config;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -13,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+  private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
   @ExceptionHandler(ResponseStatusException.class)
   public ResponseEntity<Map<String, Object>> handleStatus(ResponseStatusException exception) {
@@ -29,6 +32,7 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Map<String, Object>> handleGeneric(Exception exception) {
+    log.error("Unhandled exception", exception);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(payload(exception.getMessage() != null ? exception.getMessage() : "Unexpected server error"));
   }
 

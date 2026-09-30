@@ -25,4 +25,6 @@ public interface ViewRecordRepository extends JpaRepository<ViewRecord, Long> {
   @Query("SELECT v.contentItem.id, v.contentItem.title, v.user.id, v.user.fullName, v.user.email, COUNT(v), MAX(v.viewedAt) "
     + "FROM ViewRecord v GROUP BY v.contentItem.id, v.contentItem.title, v.user.id, v.user.fullName, v.user.email")
   List<Object[]> countGroupedByContentItemAndUser();
+
+  void deleteByContentItem_Id(UUID contentItemId);
 }

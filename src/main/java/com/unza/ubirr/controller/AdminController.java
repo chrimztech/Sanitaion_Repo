@@ -140,6 +140,11 @@ public class AdminController {
     adminService.deleteEvent(id);
   }
 
+  @PostMapping("/events/{id}/image")
+  public java.util.Map<String, String> uploadEventImage(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
+    return java.util.Map.of("url", adminService.uploadEventImage(id, file));
+  }
+
   @GetMapping("/digitization")
   public List<AdminDtos.DigitizationDto> digitization() {
     return adminService.digitization();
@@ -460,5 +465,10 @@ public class AdminController {
   @GetMapping("/training/{id}/registrations")
   public List<AdminDtos.TrainingRegistrationAdminDto> trainingRegistrations(@PathVariable UUID id) {
     return adminService.trainingRegistrations(id);
+  }
+
+  @PostMapping("/training/{id}/image")
+  public java.util.Map<String, String> uploadTrainingImage(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
+    return java.util.Map.of("url", adminService.uploadTrainingImage(id, file));
   }
 }

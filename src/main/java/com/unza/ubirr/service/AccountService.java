@@ -265,7 +265,8 @@ public class AccountService {
           s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
           s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
           s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt,
-          count, registered
+          count, registered,
+          s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
         );
       })
       .toList();

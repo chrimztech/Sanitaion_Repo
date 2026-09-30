@@ -472,7 +472,8 @@ public class PublicService {
       event.registrationLink,
       event.accessLevel.apiValue(),
       event.status.apiValue(),
-      event.publishedAt
+      event.publishedAt,
+      event.bannerImagePath != null ? "/api/files/event/" + event.id + "/image" : null
     );
   }
 
@@ -561,7 +562,8 @@ public class PublicService {
         s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
         s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
         s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt,
-        trainingRegistrationRepository.countActiveBySessionId(s.id)
+        trainingRegistrationRepository.countActiveBySessionId(s.id),
+        s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
       ))
       .toList();
   }

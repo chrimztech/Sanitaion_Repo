@@ -108,6 +108,38 @@ public class StorageService {
     }
   }
 
+  public String storeEventImage(UUID eventId, MultipartFile file) {
+    try {
+      String extension = fileExtension(file.getOriginalFilename());
+      String safeName = "image" + (extension.isBlank() ? "" : "." + extension);
+      Path directory = root.resolve("thumbnails").resolve("events").resolve(eventId.toString());
+      Files.createDirectories(directory);
+      Path target = directory.resolve(safeName);
+      try (InputStream inputStream = file.getInputStream()) {
+        Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+      return root.relativize(target).toString().replace('\\', '/');
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to store event image", e);
+    }
+  }
+
+  public String storeTrainingImage(UUID trainingId, MultipartFile file) {
+    try {
+      String extension = fileExtension(file.getOriginalFilename());
+      String safeName = "image" + (extension.isBlank() ? "" : "." + extension);
+      Path directory = root.resolve("thumbnails").resolve("training").resolve(trainingId.toString());
+      Files.createDirectories(directory);
+      Path target = directory.resolve(safeName);
+      try (InputStream inputStream = file.getInputStream()) {
+        Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+      return root.relativize(target).toString().replace('\\', '/');
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to store training image", e);
+    }
+  }
+
   public String storeBannerImage(UUID bannerId, MultipartFile file) {
     try {
       String extension = fileExtension(file.getOriginalFilename());
