@@ -23,5 +23,13 @@ public interface DownloadRecordRepository extends JpaRepository<DownloadRecord, 
     + "FROM DownloadRecord d GROUP BY d.contentFile.contentItem.id, d.contentFile.contentItem.title, d.user.id, d.user.fullName, d.user.email")
   List<Object[]> countGroupedByContentItemAndUser();
 
-  void deleteByContentFile_ContentItem_Id(UUID contentItemId);
+  // A derived (find-then-remove) delete here would navigate contentFile.contentItem.id,
+  // which makes Hibernate materialize an uninitialized ContentFile proxy into the persistence
+  // context. Direct field access on that cold proxy (this codebase uses public fields, not
+  // getters) then silently reads as null instead of triggering initialization — poisoning the
+  // very next ContentFile query in the same transaction (AdminService.deleteContent's file
+  // cleanup loop). A bulk @Modifying delete goes straight to SQL and never creates proxies.
+  @Modifying
+  @Query("DELETE FROM DownloadRecord d WHERE d.contentFile.id IN (SELECT cf.id FROM ContentFile cf WHERE cf.contentItem.id = :contentItemId)")
+  void deleteByContentFile_ContentItem_Id(@Param("contentItemId") UUID contentItemId);
 }
