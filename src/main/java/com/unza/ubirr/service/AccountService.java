@@ -186,7 +186,11 @@ public class AccountService {
 
   public void deleteReadingList(UUID id) {
     AppUser user = authContextService.requireUser();
-    readingListRepository.delete(ownedList(id, user.id));
+    ReadingList list = ownedList(id, user.id);
+    // Children must go first — reading_list_items has a not-null FK to reading_lists,
+    // so deleting the parent while items still reference it violates that constraint.
+    readingListItemRepository.deleteByReadingList_Id(list.id);
+    readingListRepository.delete(list);
   }
 
   public AccountDtos.ReadingListDto addReadingListItem(UUID listId, AccountDtos.SaveReadingListItemRequest request) {
@@ -204,7 +208,10 @@ public class AccountService {
 
   public void removeReadingListItem(UUID itemId) {
     AppUser user = authContextService.requireUser();
-    ReadingListItem item = readingListItemRepository.findById(itemId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Reading list item not found"));
+    // findByIdWithOwner fetch-joins readingList + its user — item.readingList.user.id would
+    // otherwise walk two cold lazy associations at once and NPE (see the repository for why).
+    ReadingListItem item = readingListItemRepository.findByIdWithOwner(itemId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Reading list item not found"));
     if (!item.readingList.user.id.equals(user.id)) {
       throw new ResponseStatusException(NOT_FOUND, "Reading list item not found");
     }

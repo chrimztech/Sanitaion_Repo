@@ -36,6 +36,8 @@ import com.unza.ubirr.repository.BookmarkRepository;
 import com.unza.ubirr.model.ContentTypeDef;
 import com.unza.ubirr.repository.ContentTypeDefRepository;
 import com.unza.ubirr.repository.DemonstrationSiteRepository;
+import com.unza.ubirr.repository.SiteMonitoringRecordRepository;
+import com.unza.ubirr.model.SiteMonitoringRecord;
 import com.unza.ubirr.repository.HeroBannerRepository;
 import com.unza.ubirr.repository.CategoryRepository;
 import com.unza.ubirr.repository.ContentFileRepository;
@@ -93,6 +95,7 @@ public class AdminService {
   private final ReadingListRepository readingListRepository;
   private final ReadingListItemRepository readingListItemRepository;
   private final DemonstrationSiteRepository demonstrationSiteRepository;
+  private final SiteMonitoringRecordRepository siteMonitoringRecordRepository;
   private final HeroBannerRepository heroBannerRepository;
   private final ContentTypeDefRepository contentTypeDefRepository;
   private final TrainingSessionRepository trainingSessionRepository;
@@ -126,6 +129,7 @@ public class AdminService {
     ReadingListRepository readingListRepository,
     ReadingListItemRepository readingListItemRepository,
     DemonstrationSiteRepository demonstrationSiteRepository,
+    SiteMonitoringRecordRepository siteMonitoringRecordRepository,
     HeroBannerRepository heroBannerRepository,
     ContentTypeDefRepository contentTypeDefRepository,
     TrainingSessionRepository trainingSessionRepository,
@@ -158,6 +162,7 @@ public class AdminService {
     this.readingListRepository = readingListRepository;
     this.readingListItemRepository = readingListItemRepository;
     this.demonstrationSiteRepository = demonstrationSiteRepository;
+    this.siteMonitoringRecordRepository = siteMonitoringRecordRepository;
     this.heroBannerRepository = heroBannerRepository;
     this.contentTypeDefRepository = contentTypeDefRepository;
     this.trainingSessionRepository = trainingSessionRepository;
@@ -817,6 +822,86 @@ public class AdminService {
     AppUser user = authContextService.requireUser();
     demonstrationSiteRepository.deleteById(id);
     auditService.log(user, "site.delete", "demonstration_sites", id.toString());
+  }
+
+  // ── Site monitoring / M&E records ───────────────────────────────────────
+
+  public List<AdminDtos.SiteMonitoringRecordDto> siteMonitoringRecords(UUID siteId) {
+    authContextService.requireContentManager();
+    if (!demonstrationSiteRepository.existsById(siteId)) {
+      throw new ResponseStatusException(NOT_FOUND, "Site not found");
+    }
+    return siteMonitoringRecordRepository.findBySiteIdOrderByVisitDateDesc(siteId).stream()
+      .map(this::siteMonitoringRecordDto)
+      .toList();
+  }
+
+  public AdminDtos.SiteMonitoringRecordDto createSiteMonitoringRecord(UUID siteId, AdminDtos.SaveSiteMonitoringRecordRequest request) {
+    authContextService.requireContentManager();
+    AppUser user = authContextService.requireUser();
+    DemonstrationSite site = demonstrationSiteRepository.findById(siteId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Site not found"));
+
+    SiteMonitoringRecord record = new SiteMonitoringRecord();
+    record.site = site;
+    applyMonitoringRequest(record, request);
+    record.recordedBy = user;
+    record = siteMonitoringRecordRepository.save(record);
+    auditService.log(user, "site.monitoring.create", "site_monitoring_records", record.id.toString());
+    return siteMonitoringRecordDto(record);
+  }
+
+  public AdminDtos.SiteMonitoringRecordDto updateSiteMonitoringRecord(UUID recordId, AdminDtos.SaveSiteMonitoringRecordRequest request) {
+    authContextService.requireContentManager();
+    AppUser user = authContextService.requireUser();
+    // findByIdWithSite fetch-joins site — plain findById would leave it as a cold lazy proxy,
+    // and record.site.id in the DTO mapping below would silently come back null.
+    SiteMonitoringRecord record = siteMonitoringRecordRepository.findByIdWithSite(recordId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Monitoring record not found"));
+    applyMonitoringRequest(record, request);
+    record = siteMonitoringRecordRepository.save(record);
+    auditService.log(user, "site.monitoring.update", "site_monitoring_records", record.id.toString());
+    return siteMonitoringRecordDto(record);
+  }
+
+  public void deleteSiteMonitoringRecord(UUID recordId) {
+    authContextService.requireContentManager();
+    AppUser user = authContextService.requireUser();
+    if (!siteMonitoringRecordRepository.existsById(recordId)) {
+      throw new ResponseStatusException(NOT_FOUND, "Monitoring record not found");
+    }
+    siteMonitoringRecordRepository.deleteById(recordId);
+    auditService.log(user, "site.monitoring.delete", "site_monitoring_records", recordId.toString());
+  }
+
+  private void applyMonitoringRequest(SiteMonitoringRecord record, AdminDtos.SaveSiteMonitoringRecordRequest request) {
+    record.visitDate = request.visitDate();
+    record.conductedBy = blankToNull(request.conductedBy());
+    record.performanceRating = blankToNull(request.performanceRating());
+    record.findings = blankToNull(request.findings());
+    record.recommendations = blankToNull(request.recommendations());
+    record.followUpRequired = request.followUpRequired();
+    record.followUpDate = request.followUpDate();
+  }
+
+  private String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+
+  private AdminDtos.SiteMonitoringRecordDto siteMonitoringRecordDto(SiteMonitoringRecord r) {
+    return new AdminDtos.SiteMonitoringRecordDto(
+      r.id,
+      r.site.id,
+      r.visitDate,
+      r.conductedBy,
+      r.performanceRating,
+      r.findings,
+      r.recommendations,
+      r.followUpRequired,
+      r.followUpDate,
+      r.recordedBy != null ? r.recordedBy.fullName : null,
+      r.createdAt
+    );
   }
 
   private String uniqueSiteSlug(UUID id, String requestedSlug, String name) {

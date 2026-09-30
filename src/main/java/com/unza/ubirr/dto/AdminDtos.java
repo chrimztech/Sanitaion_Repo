@@ -1,6 +1,7 @@
 package com.unza.ubirr.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -350,6 +351,33 @@ public final class AdminDtos {
     Double latitude,
     Double longitude,
     String notes
+  ) {
+  }
+
+  public record SiteMonitoringRecordDto(
+    UUID id,
+    UUID siteId,
+    LocalDate visitDate,
+    String conductedBy,
+    String performanceRating,
+    String findings,
+    String recommendations,
+    boolean followUpRequired,
+    LocalDate followUpDate,
+    String recordedByName,
+    Instant createdAt
+  ) {
+  }
+
+  public record SaveSiteMonitoringRecordRequest(
+    @NotNull(message = "Visit date is required")
+    LocalDate visitDate,
+    String conductedBy,
+    String performanceRating,
+    String findings,
+    String recommendations,
+    boolean followUpRequired,
+    LocalDate followUpDate
   ) {
   }
 

@@ -372,6 +372,31 @@ public class AdminController {
     adminService.deleteSite(id);
   }
 
+  @GetMapping("/sites/{siteId}/monitoring")
+  public List<AdminDtos.SiteMonitoringRecordDto> siteMonitoringRecords(@PathVariable UUID siteId) {
+    return adminService.siteMonitoringRecords(siteId);
+  }
+
+  @PostMapping("/sites/{siteId}/monitoring")
+  public AdminDtos.SiteMonitoringRecordDto createSiteMonitoringRecord(
+    @PathVariable UUID siteId, @Valid @RequestBody AdminDtos.SaveSiteMonitoringRecordRequest request
+  ) {
+    return adminService.createSiteMonitoringRecord(siteId, request);
+  }
+
+  @PutMapping("/sites/monitoring/{recordId}")
+  public AdminDtos.SiteMonitoringRecordDto updateSiteMonitoringRecord(
+    @PathVariable UUID recordId, @Valid @RequestBody AdminDtos.SaveSiteMonitoringRecordRequest request
+  ) {
+    return adminService.updateSiteMonitoringRecord(recordId, request);
+  }
+
+  @DeleteMapping("/sites/monitoring/{recordId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void deleteSiteMonitoringRecord(@PathVariable UUID recordId) {
+    adminService.deleteSiteMonitoringRecord(recordId);
+  }
+
   @PostMapping("/sites/{id}/image")
   public java.util.Map<String, String> uploadSiteImage(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
     String url = adminService.uploadSiteImage(id, file);
