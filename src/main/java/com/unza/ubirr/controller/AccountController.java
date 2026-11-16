@@ -1,6 +1,7 @@
 package com.unza.ubirr.controller;
 
 import com.unza.ubirr.dto.AccountDtos;
+import com.unza.ubirr.dto.PublicDtos;
 import com.unza.ubirr.service.AccountService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -55,6 +56,17 @@ public class AccountController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void removeBookmark(@PathVariable UUID contentId) {
     accountService.removeBookmark(contentId);
+  }
+
+  @PostMapping("/reviews/{contentId}")
+  public PublicDtos.ReviewDto submitReview(@PathVariable UUID contentId, @Valid @RequestBody AccountDtos.CreateReviewRequest request) {
+    return accountService.upsertReview(contentId, request);
+  }
+
+  @DeleteMapping("/reviews/{contentId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void deleteReview(@PathVariable UUID contentId) {
+    accountService.deleteOwnReview(contentId);
   }
 
   @GetMapping("/recent-views")

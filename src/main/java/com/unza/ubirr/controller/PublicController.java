@@ -70,6 +70,11 @@ public class PublicController {
     publicService.recordView(id, request.getRemoteAddr());
   }
 
+  @GetMapping("/resources/{id}/reviews")
+  public List<PublicDtos.ReviewDto> reviews(@PathVariable UUID id) {
+    return publicService.reviewsForResource(id);
+  }
+
   @GetMapping("/events")
   public List<PublicDtos.EventDto> events() {
     return publicService.publicEvents();

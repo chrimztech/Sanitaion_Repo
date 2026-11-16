@@ -19,6 +19,7 @@ import com.unza.ubirr.model.DigitizationRecord;
 import com.unza.ubirr.model.DigitizationStatus;
 import com.unza.ubirr.model.EventEntity;
 import com.unza.ubirr.model.Notification;
+import com.unza.ubirr.model.Review;
 import com.unza.ubirr.model.School;
 import com.unza.ubirr.model.SystemSetting;
 import com.unza.ubirr.model.Tag;
@@ -50,6 +51,7 @@ import com.unza.ubirr.repository.EventRepository;
 import com.unza.ubirr.repository.NotificationRepository;
 import com.unza.ubirr.repository.ReadingListItemRepository;
 import com.unza.ubirr.repository.ReadingListRepository;
+import com.unza.ubirr.repository.ReviewRepository;
 import com.unza.ubirr.repository.SchoolRepository;
 import com.unza.ubirr.repository.SystemSettingRepository;
 import com.unza.ubirr.repository.TagRepository;
@@ -108,6 +110,7 @@ public class AdminService {
   private final ThumbnailService thumbnailService;
   private final AuditService auditService;
   private final PublicService publicService;
+  private final ReviewRepository reviewRepository;
 
   public AdminService(
     AuthContextService authContextService,
@@ -142,7 +145,8 @@ public class AdminService {
     StorageService storageService,
     ThumbnailService thumbnailService,
     AuditService auditService,
-    PublicService publicService
+    PublicService publicService,
+    ReviewRepository reviewRepository
   ) {
     this.authContextService = authContextService;
     this.contentItemRepository = contentItemRepository;
@@ -177,6 +181,7 @@ public class AdminService {
     this.thumbnailService = thumbnailService;
     this.auditService = auditService;
     this.publicService = publicService;
+    this.reviewRepository = reviewRepository;
   }
 
   public AdminDtos.DashboardSummaryDto dashboard() {
@@ -431,6 +436,7 @@ public class AdminService {
     approvalWorkflowRepository.deleteByContentItem_Id(id);
     contentTagRepository.deleteByContentItem_Id(id);
     digitizationRecordRepository.unlinkContentItem(id);
+    reviewRepository.deleteByContentItem_Id(id);
     contentItemRepository.delete(item);
     auditService.log(user, "content.delete", "content_items", id.toString());
   }
@@ -798,6 +804,34 @@ public class AdminService {
       ))
       .sorted(Comparator.comparing(AdminDtos.ResourceAccessRow::lastAccessedAt, Comparator.nullsLast(Comparator.reverseOrder())))
       .toList();
+  }
+
+  public List<AdminDtos.ReviewAdminDto> reviews() {
+    authContextService.requireContentManager();
+    return reviewRepository.findAllForModeration().stream()
+      .map(r -> new AdminDtos.ReviewAdminDto(
+        r.id,
+        r.contentItem.id,
+        r.contentItem.title,
+        r.user.fullName,
+        r.user.email,
+        r.rating,
+        r.body,
+        r.createdAt
+      ))
+      .toList();
+  }
+
+  @Caching(evict = {
+    @CacheEvict(value = "public-resources", allEntries = true),
+    @CacheEvict(value = "public-resource",  allEntries = true),
+    @CacheEvict(value = "public-home",      allEntries = true),
+    @CacheEvict(value = "public-gallery",   allEntries = true)
+  })
+  public void deleteReview(UUID reviewId) {
+    authContextService.requireContentManager();
+    Review review = reviewRepository.findById(reviewId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Review not found"));
+    reviewRepository.delete(review);
   }
 
   public List<AdminDtos.DemonstrationSiteDto> adminSites() {

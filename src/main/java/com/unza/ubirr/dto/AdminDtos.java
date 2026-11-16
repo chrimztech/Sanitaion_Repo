@@ -446,6 +446,18 @@ public final class AdminDtos {
   ) {
   }
 
+  public record ReviewAdminDto(
+    UUID id,
+    UUID contentItemId,
+    String resourceTitle,
+    String userName,
+    String userEmail,
+    int rating,
+    String body,
+    Instant createdAt
+  ) {
+  }
+
   public record ReportsDto(
     long totalResources,
     long publishedResources,

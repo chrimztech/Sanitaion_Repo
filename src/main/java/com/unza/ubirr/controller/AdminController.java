@@ -295,6 +295,17 @@ public class AdminController {
       .body(pdf);
   }
 
+  @GetMapping("/reviews")
+  public List<AdminDtos.ReviewAdminDto> reviews() {
+    return adminService.reviews();
+  }
+
+  @DeleteMapping("/reviews/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void deleteReview(@PathVariable UUID id) {
+    adminService.deleteReview(id);
+  }
+
   @GetMapping("/audit")
   public List<AdminDtos.AuditLogDto> audit(
     @RequestParam(required = false) String action,

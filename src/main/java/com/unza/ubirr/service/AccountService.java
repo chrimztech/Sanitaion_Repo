@@ -1,6 +1,7 @@
 package com.unza.ubirr.service;
 
 import com.unza.ubirr.dto.AccountDtos;
+import com.unza.ubirr.dto.PublicDtos;
 import com.unza.ubirr.model.AppUser;
 import com.unza.ubirr.model.Bookmark;
 import com.unza.ubirr.model.ContentItem;
@@ -8,6 +9,7 @@ import com.unza.ubirr.model.ContentStatus;
 import com.unza.ubirr.model.Notification;
 import com.unza.ubirr.model.ReadingList;
 import com.unza.ubirr.model.ReadingListItem;
+import com.unza.ubirr.model.Review;
 import com.unza.ubirr.model.TrainingRegistration;
 import com.unza.ubirr.model.TrainingSession;
 import com.unza.ubirr.model.ViewRecord;
@@ -17,6 +19,7 @@ import com.unza.ubirr.repository.ContentItemRepository;
 import com.unza.ubirr.repository.NotificationRepository;
 import com.unza.ubirr.repository.ReadingListItemRepository;
 import com.unza.ubirr.repository.ReadingListRepository;
+import com.unza.ubirr.repository.ReviewRepository;
 import com.unza.ubirr.repository.TrainingRegistrationRepository;
 import com.unza.ubirr.repository.TrainingSessionRepository;
 import com.unza.ubirr.repository.ViewRecordRepository;
@@ -26,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -45,6 +49,7 @@ public class AccountService {
   private final TrainingSessionRepository trainingSessionRepository;
   private final TrainingRegistrationRepository trainingRegistrationRepository;
   private final PublicService publicService;
+  private final ReviewRepository reviewRepository;
 
   public AccountService(
     AuthContextService authContextService,
@@ -57,7 +62,8 @@ public class AccountService {
     ReadingListItemRepository readingListItemRepository,
     TrainingSessionRepository trainingSessionRepository,
     TrainingRegistrationRepository trainingRegistrationRepository,
-    PublicService publicService
+    PublicService publicService,
+    ReviewRepository reviewRepository
   ) {
     this.authContextService = authContextService;
     this.appUserRepository = appUserRepository;
@@ -70,6 +76,7 @@ public class AccountService {
     this.trainingSessionRepository = trainingSessionRepository;
     this.trainingRegistrationRepository = trainingRegistrationRepository;
     this.publicService = publicService;
+    this.reviewRepository = reviewRepository;
   }
 
   public AccountDtos.ProfileDto profile() {
@@ -105,6 +112,26 @@ public class AccountService {
       .filter(bookmark -> bookmark.contentItem.deletedAt == null && bookmark.contentItem.title != null && bookmark.contentItem.slug != null)
       .map(bookmark -> new AccountDtos.BookmarkDto(bookmark.id, bookmark.createdAt, publicService.summary(bookmark.contentItem)))
       .toList();
+  }
+
+  @CacheEvict(value = {"public-resources", "public-resource", "public-home", "public-gallery"}, allEntries = true)
+  public PublicDtos.ReviewDto upsertReview(UUID contentId, AccountDtos.CreateReviewRequest request) {
+    AppUser user = authContextService.requireUser();
+    ContentItem item = contentItemRepository.findById(contentId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
+    Review review = reviewRepository.findByContentItem_IdAndUser_Id(contentId, user.id).orElseGet(Review::new);
+    review.contentItem = item;
+    review.user = user;
+    review.rating = request.rating();
+    review.body = request.body() == null || request.body().isBlank() ? null : request.body().trim();
+    Review saved = reviewRepository.save(review);
+    return new PublicDtos.ReviewDto(saved.id, user.fullName, true, saved.rating, saved.body, saved.createdAt, saved.updatedAt);
+  }
+
+  @CacheEvict(value = {"public-resources", "public-resource", "public-home", "public-gallery"}, allEntries = true)
+  public void deleteOwnReview(UUID contentId) {
+    AppUser user = authContextService.requireUser();
+    reviewRepository.findByContentItem_IdAndUser_Id(contentId, user.id)
+      .ifPresent(reviewRepository::delete);
   }
 
   public AccountDtos.BookmarkStatusDto bookmarkStatus(UUID contentId) {

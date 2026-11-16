@@ -10,6 +10,7 @@ import com.unza.ubirr.model.ContentItem;
 import com.unza.ubirr.model.ContentStatus;
 import com.unza.ubirr.model.DownloadRecord;
 import com.unza.ubirr.model.EventEntity;
+import com.unza.ubirr.model.Review;
 import com.unza.ubirr.model.ViewRecord;
 import com.unza.ubirr.model.DemonstrationSite;
 import com.unza.ubirr.repository.CategoryRepository;
@@ -19,6 +20,7 @@ import com.unza.ubirr.repository.DepartmentRepository;
 import com.unza.ubirr.repository.DemonstrationSiteRepository;
 import com.unza.ubirr.repository.DownloadRecordRepository;
 import com.unza.ubirr.repository.EventRepository;
+import com.unza.ubirr.repository.ReviewRepository;
 import com.unza.ubirr.repository.TrainingRegistrationRepository;
 import com.unza.ubirr.repository.TrainingSessionRepository;
 import com.unza.ubirr.repository.SystemSettingRepository;
@@ -66,6 +68,7 @@ public class PublicService {
   private final TrainingRegistrationRepository trainingRegistrationRepository;
   private final AuthContextService authContextService;
   private final SystemSettingRepository systemSettingRepository;
+  private final ReviewRepository reviewRepository;
 
   public PublicService(
     ContentItemRepository contentItemRepository,
@@ -79,7 +82,8 @@ public class PublicService {
     TrainingSessionRepository trainingSessionRepository,
     TrainingRegistrationRepository trainingRegistrationRepository,
     AuthContextService authContextService,
-    SystemSettingRepository systemSettingRepository
+    SystemSettingRepository systemSettingRepository,
+    ReviewRepository reviewRepository
   ) {
     this.contentItemRepository = contentItemRepository;
     this.contentFileRepository = contentFileRepository;
@@ -93,6 +97,7 @@ public class PublicService {
     this.trainingRegistrationRepository = trainingRegistrationRepository;
     this.authContextService = authContextService;
     this.systemSettingRepository = systemSettingRepository;
+    this.reviewRepository = reviewRepository;
   }
 
   @Cacheable("public-home")
@@ -255,8 +260,30 @@ public class PublicService {
       categoryDto,
       fileDtos,
       related,
-      thumbnailUrl
+      thumbnailUrl,
+      reviewRepository.averageRating(item.id),
+      reviewRepository.countByContentItem_Id(item.id)
     );
+  }
+
+  public List<PublicDtos.ReviewDto> reviewsForResource(UUID contentItemId) {
+    ContentItem gate = contentItemRepository.findById(contentItemId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Resource not found"));
+    if (!canAccess(gate, authContextService.currentUser().orElse(null))) {
+      throw new ResponseStatusException(NOT_FOUND, "Resource not found");
+    }
+    UUID currentUserId = authContextService.currentUserIdOrNull();
+    return reviewRepository.findByContentItem_IdOrderByCreatedAtDesc(contentItemId).stream()
+      .map(r -> new PublicDtos.ReviewDto(
+        r.id,
+        r.user.fullName,
+        currentUserId != null && currentUserId.equals(r.user.id),
+        r.rating,
+        r.body,
+        r.createdAt,
+        r.updatedAt
+      ))
+      .toList();
   }
 
   @Cacheable("public-events")
@@ -393,7 +420,8 @@ public class PublicService {
   }
 
   public PublicDtos.ResourceSummaryDto summary(ContentItem item) {
-    return summary(item, null);
+    Map<UUID, ReviewRepository.RatingAggRow> ratings = ratingAggMap(List.of(item.id));
+    return summary(item, null, ratings);
   }
 
   // Batches the per-item "find a fallback thumbnail" lookup into a single query instead of
@@ -415,10 +443,18 @@ public class PublicService {
             (firstByCreatedAt, ignored) -> firstByCreatedAt
           ));
 
-    return items.stream().map(item -> summary(item, fallbackThumbnails)).toList();
+    Map<UUID, ReviewRepository.RatingAggRow> ratings = ratingAggMap(items.stream().map(item -> item.id).toList());
+
+    return items.stream().map(item -> summary(item, fallbackThumbnails, ratings)).toList();
   }
 
-  private PublicDtos.ResourceSummaryDto summary(ContentItem item, Map<UUID, String> fallbackThumbnails) {
+  private Map<UUID, ReviewRepository.RatingAggRow> ratingAggMap(List<UUID> contentItemIds) {
+    if (contentItemIds.isEmpty()) return Map.of();
+    return reviewRepository.ratingSummaries(contentItemIds).stream()
+      .collect(Collectors.toMap(ReviewRepository.RatingAggRow::getContentItemId, row -> row));
+  }
+
+  private PublicDtos.ResourceSummaryDto summary(ContentItem item, Map<UUID, String> fallbackThumbnails, Map<UUID, ReviewRepository.RatingAggRow> ratings) {
     String thumbnail;
     if (item.thumbnailPath != null) {
       thumbnail = "/api/files/thumbnail/" + item.id;
@@ -432,6 +468,7 @@ public class PublicService {
         .map(file -> "/api/files/" + file.id + "/preview")
         .orElse(null);
     }
+    ReviewRepository.RatingAggRow rating = ratings == null ? null : ratings.get(item.id);
     return new PublicDtos.ResourceSummaryDto(
       item.id,
       item.title,
@@ -441,7 +478,9 @@ public class PublicService {
       item.accessLevel.apiValue(),
       item.publishedAt,
       thumbnail,
-      item.category != null ? item.category.slug : null
+      item.category != null ? item.category.slug : null,
+      rating != null ? rating.getAvgRating() : 0,
+      rating != null ? rating.getReviewCount() : 0
     );
   }
 

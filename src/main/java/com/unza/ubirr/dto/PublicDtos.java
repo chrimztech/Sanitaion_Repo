@@ -38,7 +38,9 @@ public final class PublicDtos {
     String accessLevel,
     Instant publishedAt,
     String thumbnailUrl,
-    String categorySlug
+    String categorySlug,
+    double averageRating,
+    long reviewCount
   ) {
   }
 
@@ -66,7 +68,20 @@ public final class PublicDtos {
     CategoryDto category,
     List<ContentFileDto> files,
     List<ResourceSummaryDto> relatedResources,
-    String thumbnailUrl
+    String thumbnailUrl,
+    double averageRating,
+    long reviewCount
+  ) {
+  }
+
+  public record ReviewDto(
+    UUID id,
+    String userName,
+    boolean own,
+    int rating,
+    String body,
+    Instant createdAt,
+    Instant updatedAt
   ) {
   }
 
