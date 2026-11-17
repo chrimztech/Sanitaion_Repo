@@ -121,6 +121,7 @@ public final class AdminDtos {
     String accessLevel,
     String status,
     Instant publishedAt,
+    long registrationCount,
     String bannerImageUrl
   ) {
   }
@@ -210,6 +211,12 @@ public final class AdminDtos {
   }
 
   public record AdvanceStatusRequest(
+    @NotBlank(message = "Status is required")
+    String status
+  ) {
+  }
+
+  public record UpdateRegistrationStatusRequest(
     @NotBlank(message = "Status is required")
     String status
   ) {
@@ -425,6 +432,16 @@ public final class AdminDtos {
   }
 
   public record TrainingRegistrationAdminDto(
+    UUID id,
+    UUID userId,
+    String userName,
+    String userEmail,
+    String status,
+    Instant registeredAt
+  ) {
+  }
+
+  public record EventRegistrationAdminDto(
     UUID id,
     UUID userId,
     String userName,

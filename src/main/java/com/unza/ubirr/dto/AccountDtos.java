@@ -148,4 +148,36 @@ public final class AccountDtos {
     Instant registeredAt
   ) {
   }
+
+  public record EventPublicDto(
+    UUID id,
+    String title,
+    String slug,
+    String description,
+    String venue,
+    LocalDate startDate,
+    LocalDate endDate,
+    LocalTime startTime,
+    LocalTime endTime,
+    String organizer,
+    String contactEmail,
+    String registrationLink,
+    String status,
+    Instant publishedAt,
+    long registrationCount,
+    boolean registered,
+    String bannerImageUrl
+  ) {
+  }
+
+  public record EventRegistrationDto(
+    UUID id,
+    UUID eventId,
+    String eventTitle,
+    String eventSlug,
+    LocalDate eventStartDate,
+    String status,
+    Instant registeredAt
+  ) {
+  }
 }

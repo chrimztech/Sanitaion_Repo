@@ -80,22 +80,22 @@ public class ContentItem {
   @Column(nullable = false)
   public boolean downloadable = true;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String copyrightStatus;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String licenceInformation;
 
   @Column
   public String language = "en";
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String keywords;
 
   @Column(columnDefinition = "TEXT")
   public String authors;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String publisher;
 
   // Date the resource was originally published (may differ from system publishedAt)
@@ -107,15 +107,15 @@ public class ContentItem {
   public LocalDate activityDate;
 
   // Institution or organisation that produced this resource
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String sourceInstitution;
 
   // DOI, ISBN, or other external identifier
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String externalIdentifier;
 
   // Volume/issue/page range for journal articles
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String bibliographicInfo;
 
   @Column

@@ -140,6 +140,17 @@ public class AdminController {
     adminService.deleteEvent(id);
   }
 
+  @GetMapping("/events/{id}/registrations")
+  public List<AdminDtos.EventRegistrationAdminDto> eventRegistrations(@PathVariable UUID id) {
+    return adminService.eventRegistrations(id);
+  }
+
+  @PutMapping("/events/registrations/{registrationId}/status")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void updateEventRegistrationStatus(@PathVariable UUID registrationId, @Valid @RequestBody AdminDtos.UpdateRegistrationStatusRequest request) {
+    adminService.updateEventRegistrationStatus(registrationId, request.status());
+  }
+
   @PostMapping("/events/{id}/image")
   public java.util.Map<String, String> uploadEventImage(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
     return java.util.Map.of("url", adminService.uploadEventImage(id, file));
@@ -476,6 +487,12 @@ public class AdminController {
   @GetMapping("/training/{id}/registrations")
   public List<AdminDtos.TrainingRegistrationAdminDto> trainingRegistrations(@PathVariable UUID id) {
     return adminService.trainingRegistrations(id);
+  }
+
+  @PutMapping("/training/registrations/{registrationId}/status")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void updateTrainingRegistrationStatus(@PathVariable UUID registrationId, @Valid @RequestBody AdminDtos.UpdateRegistrationStatusRequest request) {
+    adminService.updateTrainingRegistrationStatus(registrationId, request.status());
   }
 
   @PostMapping("/training/{id}/image")

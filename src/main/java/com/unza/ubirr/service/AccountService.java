@@ -6,6 +6,8 @@ import com.unza.ubirr.model.AppUser;
 import com.unza.ubirr.model.Bookmark;
 import com.unza.ubirr.model.ContentItem;
 import com.unza.ubirr.model.ContentStatus;
+import com.unza.ubirr.model.EventEntity;
+import com.unza.ubirr.model.EventRegistration;
 import com.unza.ubirr.model.Notification;
 import com.unza.ubirr.model.ReadingList;
 import com.unza.ubirr.model.ReadingListItem;
@@ -16,6 +18,8 @@ import com.unza.ubirr.model.ViewRecord;
 import com.unza.ubirr.repository.AppUserRepository;
 import com.unza.ubirr.repository.BookmarkRepository;
 import com.unza.ubirr.repository.ContentItemRepository;
+import com.unza.ubirr.repository.EventRegistrationRepository;
+import com.unza.ubirr.repository.EventRepository;
 import com.unza.ubirr.repository.NotificationRepository;
 import com.unza.ubirr.repository.ReadingListItemRepository;
 import com.unza.ubirr.repository.ReadingListRepository;
@@ -48,6 +52,8 @@ public class AccountService {
   private final ReadingListItemRepository readingListItemRepository;
   private final TrainingSessionRepository trainingSessionRepository;
   private final TrainingRegistrationRepository trainingRegistrationRepository;
+  private final EventRepository eventRepository;
+  private final EventRegistrationRepository eventRegistrationRepository;
   private final PublicService publicService;
   private final ReviewRepository reviewRepository;
 
@@ -62,6 +68,8 @@ public class AccountService {
     ReadingListItemRepository readingListItemRepository,
     TrainingSessionRepository trainingSessionRepository,
     TrainingRegistrationRepository trainingRegistrationRepository,
+    EventRepository eventRepository,
+    EventRegistrationRepository eventRegistrationRepository,
     PublicService publicService,
     ReviewRepository reviewRepository
   ) {
@@ -75,6 +83,8 @@ public class AccountService {
     this.readingListItemRepository = readingListItemRepository;
     this.trainingSessionRepository = trainingSessionRepository;
     this.trainingRegistrationRepository = trainingRegistrationRepository;
+    this.eventRepository = eventRepository;
+    this.eventRegistrationRepository = eventRegistrationRepository;
     this.publicService = publicService;
     this.reviewRepository = reviewRepository;
   }
@@ -326,6 +336,8 @@ public class AccountService {
     reg.user = user;
     reg.status = "registered";
     trainingRegistrationRepository.save(reg);
+    notifyUser(user, "Registration confirmed",
+      "You're registered for \"" + session.title + "\" on " + session.startDate + ".", "/training");
   }
 
   public void cancelTrainingRegistration(UUID sessionId) {
@@ -334,6 +346,10 @@ public class AccountService {
       .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Registration not found"));
     reg.status = "cancelled";
     trainingRegistrationRepository.save(reg);
+    // reg.session is a lazy proxy here (findBySessionIdAndUserId doesn't fetch it) — load
+    // the title explicitly rather than risk the blank-proxy-field pitfall described above.
+    String title = trainingSessionRepository.findById(sessionId).map(s -> s.title).orElse("the session");
+    notifyUser(user, "Registration cancelled", "Your registration for \"" + title + "\" was cancelled.", "/training");
   }
 
   public List<AccountDtos.TrainingRegistrationDto> myTrainingRegistrations() {
@@ -351,4 +367,86 @@ public class AccountService {
       .toList();
   }
 
+  public List<AccountDtos.EventPublicDto> eventsForUser() {
+    AppUser user = authContextService.requireUser();
+    List<EventEntity> events = eventRepository.findByStatusIn(
+      List.of(ContentStatus.PUBLISHED, ContentStatus.COMPLETED));
+    return events.stream()
+      .map(e -> {
+        long count = eventRegistrationRepository.countActiveByEventId(e.id);
+        boolean registered = eventRegistrationRepository
+          .findByEventIdAndUserId(e.id, user.id)
+          .map(r -> "registered".equals(r.status))
+          .orElse(false);
+        return new AccountDtos.EventPublicDto(
+          e.id, e.title, e.slug, e.description, e.venue,
+          e.startDate, e.endDate, e.startTime, e.endTime,
+          e.organizer, e.contactEmail, e.registrationLink, e.status.apiValue(), e.publishedAt,
+          count, registered,
+          e.bannerImagePath != null ? "/api/files/event/" + e.id + "/image" : null
+        );
+      })
+      .toList();
+  }
+
+  public void registerForEvent(UUID eventId) {
+    AppUser user = authContextService.requireUser();
+    EventEntity event = eventRepository.findById(eventId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Event not found"));
+    if (event.status != ContentStatus.PUBLISHED) {
+      throw new ResponseStatusException(BAD_REQUEST, "Registration is not open for this event");
+    }
+    var existing = eventRegistrationRepository.findByEventIdAndUserId(eventId, user.id);
+    if (existing.isPresent()) {
+      if ("registered".equals(existing.get().status)) {
+        throw new ResponseStatusException(CONFLICT, "Already registered for this event");
+      }
+      existing.get().status = "registered";
+      eventRegistrationRepository.save(existing.get());
+      notifyUser(user, "Registration confirmed",
+        "You're registered for \"" + event.title + "\" on " + event.startDate + ".", "/events");
+      return;
+    }
+    EventRegistration reg = new EventRegistration();
+    reg.event = event;
+    reg.user = user;
+    reg.status = "registered";
+    eventRegistrationRepository.save(reg);
+    notifyUser(user, "Registration confirmed",
+      "You're registered for \"" + event.title + "\" on " + event.startDate + ".", "/events");
+  }
+
+  public void cancelEventRegistration(UUID eventId) {
+    AppUser user = authContextService.requireUser();
+    EventRegistration reg = eventRegistrationRepository.findByEventIdAndUserId(eventId, user.id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Registration not found"));
+    reg.status = "cancelled";
+    eventRegistrationRepository.save(reg);
+    String title = eventRepository.findById(eventId).map(e -> e.title).orElse("the event");
+    notifyUser(user, "Registration cancelled", "Your registration for \"" + title + "\" was cancelled.", "/events");
+  }
+
+  public List<AccountDtos.EventRegistrationDto> myEventRegistrations() {
+    AppUser user = authContextService.requireUser();
+    return eventRegistrationRepository.findByUserId(user.id).stream()
+      .map(r -> new AccountDtos.EventRegistrationDto(
+        r.id,
+        r.event.id,
+        r.event.title,
+        r.event.slug,
+        r.event.startDate,
+        r.status,
+        r.registeredAt
+      ))
+      .toList();
+  }
+
+  private void notifyUser(AppUser user, String title, String message, String link) {
+    Notification n = new Notification();
+    n.user = user;
+    n.title = title;
+    n.message = message;
+    n.link = link;
+    notificationRepository.save(n);
+  }
 }

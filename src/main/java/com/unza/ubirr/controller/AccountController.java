@@ -138,4 +138,26 @@ public class AccountController {
   public List<AccountDtos.TrainingRegistrationDto> myTrainingRegistrations() {
     return accountService.myTrainingRegistrations();
   }
+
+  @GetMapping("/events")
+  public List<AccountDtos.EventPublicDto> events() {
+    return accountService.eventsForUser();
+  }
+
+  @PostMapping("/events/{eventId}/register")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void registerForEvent(@PathVariable UUID eventId) {
+    accountService.registerForEvent(eventId);
+  }
+
+  @DeleteMapping("/events/{eventId}/register")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void cancelEventRegistration(@PathVariable UUID eventId) {
+    accountService.cancelEventRegistration(eventId);
+  }
+
+  @GetMapping("/events/my-registrations")
+  public List<AccountDtos.EventRegistrationDto> myEventRegistrations() {
+    return accountService.myEventRegistrations();
+  }
 }

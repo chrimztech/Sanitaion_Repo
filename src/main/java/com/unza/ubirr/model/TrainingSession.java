@@ -37,10 +37,10 @@ public class TrainingSession {
   @Column
   public String mode; // online, in-person, hybrid
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String venue;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String instructor;
 
   @Column(nullable = false)

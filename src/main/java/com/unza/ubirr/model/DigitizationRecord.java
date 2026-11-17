@@ -29,10 +29,10 @@ public class DigitizationRecord {
   @Column(columnDefinition = "TEXT")
   public String description;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String sourceOwner;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String physicalLocation;
 
   @Column
@@ -59,7 +59,7 @@ public class DigitizationRecord {
   @Column
   public String qualityStatus;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String copyrightStatus;
 
   @ManyToOne(fetch = FetchType.LAZY)

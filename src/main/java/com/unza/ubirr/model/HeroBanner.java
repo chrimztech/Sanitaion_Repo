@@ -31,7 +31,7 @@ public class HeroBanner {
   @Column
   public String imagePath;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String linkUrl;
 
   @Column(name = "display_order")

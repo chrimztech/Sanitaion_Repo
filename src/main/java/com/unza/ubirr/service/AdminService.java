@@ -25,11 +25,13 @@ import com.unza.ubirr.model.SystemSetting;
 import com.unza.ubirr.model.Tag;
 import com.unza.ubirr.model.AuthType;
 import com.unza.ubirr.model.TrainingRegistration;
+import com.unza.ubirr.model.EventRegistration;
 import com.unza.ubirr.model.TrainingSession;
 import com.unza.ubirr.model.UserRoleAssignment;
 import com.unza.ubirr.model.UserSession;
 import com.unza.ubirr.repository.AppUserRepository;
 import com.unza.ubirr.repository.TrainingRegistrationRepository;
+import com.unza.ubirr.repository.EventRegistrationRepository;
 import com.unza.ubirr.repository.TrainingSessionRepository;
 import com.unza.ubirr.repository.ApprovalWorkflowRepository;
 import com.unza.ubirr.repository.AuditLogRepository;
@@ -104,6 +106,7 @@ public class AdminService {
   private final ContentTypeDefRepository contentTypeDefRepository;
   private final TrainingSessionRepository trainingSessionRepository;
   private final TrainingRegistrationRepository trainingRegistrationRepository;
+  private final EventRegistrationRepository eventRegistrationRepository;
   private final UserSessionRepository userSessionRepository;
   private final PasswordEncoder passwordEncoder;
   private final StorageService storageService;
@@ -140,6 +143,7 @@ public class AdminService {
     ContentTypeDefRepository contentTypeDefRepository,
     TrainingSessionRepository trainingSessionRepository,
     TrainingRegistrationRepository trainingRegistrationRepository,
+    EventRegistrationRepository eventRegistrationRepository,
     UserSessionRepository userSessionRepository,
     PasswordEncoder passwordEncoder,
     StorageService storageService,
@@ -175,6 +179,7 @@ public class AdminService {
     this.contentTypeDefRepository = contentTypeDefRepository;
     this.trainingSessionRepository = trainingSessionRepository;
     this.trainingRegistrationRepository = trainingRegistrationRepository;
+    this.eventRegistrationRepository = eventRegistrationRepository;
     this.userSessionRepository = userSessionRepository;
     this.passwordEncoder = passwordEncoder;
     this.storageService = storageService;
@@ -451,7 +456,34 @@ public class AdminService {
 
   public List<AdminDtos.EventAdminDto> events() {
     authContextService.requireContentManager();
-    return eventRepository.findAll(Sort.by(Sort.Direction.DESC, "startDate")).stream().map(this::eventAdminDto).toList();
+    return eventRepository.findAll(Sort.by(Sort.Direction.DESC, "startDate")).stream()
+      .map(e -> eventAdminDto(e, eventRegistrationRepository.countActiveByEventId(e.id)))
+      .toList();
+  }
+
+  public List<AdminDtos.EventRegistrationAdminDto> eventRegistrations(UUID eventId) {
+    authContextService.requireContentManager();
+    return eventRegistrationRepository.findByEventId(eventId).stream()
+      .map(r -> new AdminDtos.EventRegistrationAdminDto(
+        r.id,
+        r.user.id,
+        r.user.fullName,
+        r.user.email,
+        r.status,
+        r.registeredAt
+      ))
+      .toList();
+  }
+
+  public void updateEventRegistrationStatus(UUID registrationId, String status) {
+    authContextService.requireContentManager();
+    if (!REGISTRATION_STATUSES.contains(status)) {
+      throw new ResponseStatusException(BAD_REQUEST, "Invalid status");
+    }
+    EventRegistration reg = eventRegistrationRepository.findById(registrationId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Registration not found"));
+    reg.status = status;
+    eventRegistrationRepository.save(reg);
   }
 
   public AdminDtos.EventAdminDto saveEvent(UUID id, AdminDtos.SaveEventRequest request) {
@@ -479,7 +511,7 @@ public class AdminService {
     }
     EventEntity saved = eventRepository.save(event);
     auditService.log(user, id == null ? "event.create" : "event.update", "events", saved.id.toString());
-    return eventAdminDto(saved);
+    return eventAdminDto(saved, eventRegistrationRepository.countActiveByEventId(saved.id));
   }
 
   @CacheEvict(value = "public-events", allEntries = true)
@@ -1062,6 +1094,13 @@ public class AdminService {
       throw new ResponseStatusException(BAD_REQUEST, "Invalid status");
     }
     user.status = status;
+    // Admin activation stands in for email verification — without this, a locally
+    // registered account an admin marks "active" would still be rejected at login
+    // behind the separate emailVerified gate, with no way to clear it from the UI.
+    if ("active".equals(status) && !user.emailVerified) {
+      user.emailVerified = true;
+      user.emailVerificationToken = null;
+    }
     appUserRepository.save(user);
   }
 
@@ -1164,7 +1203,7 @@ public class AdminService {
     auditService.log(actor, "user.password.reset", "users", userId.toString());
   }
 
-  private AdminDtos.EventAdminDto eventAdminDto(EventEntity event) {
+  private AdminDtos.EventAdminDto eventAdminDto(EventEntity event, long regCount) {
     return new AdminDtos.EventAdminDto(
       event.id,
       event.title,
@@ -1181,6 +1220,7 @@ public class AdminService {
       event.accessLevel.apiValue(),
       event.status.apiValue(),
       event.publishedAt,
+      regCount,
       event.bannerImagePath != null ? "/api/files/event/" + event.id + "/image" : null
     );
   }
@@ -1431,6 +1471,19 @@ public class AdminService {
         r.registeredAt
       ))
       .toList();
+  }
+
+  private static final List<String> REGISTRATION_STATUSES = List.of("registered", "attended", "cancelled");
+
+  public void updateTrainingRegistrationStatus(UUID registrationId, String status) {
+    authContextService.requireContentManager();
+    if (!REGISTRATION_STATUSES.contains(status)) {
+      throw new ResponseStatusException(BAD_REQUEST, "Invalid status");
+    }
+    TrainingRegistration reg = trainingRegistrationRepository.findById(registrationId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Registration not found"));
+    reg.status = status;
+    trainingRegistrationRepository.save(reg);
   }
 
   private String uniqueTrainingSlug(UUID id, String requestedSlug, String name) {

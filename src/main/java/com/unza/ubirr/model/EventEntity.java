@@ -34,7 +34,7 @@ public class EventEntity {
   @Column(columnDefinition = "TEXT")
   public String description;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String venue;
 
   @Column(nullable = false)
@@ -49,7 +49,7 @@ public class EventEntity {
   @Column
   public LocalTime endTime;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String organizer;
 
   @ManyToOne(fetch = FetchType.LAZY)
@@ -62,7 +62,7 @@ public class EventEntity {
   @Column
   public String bannerImagePath;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String registrationLink;
 
   @Enumerated(EnumType.STRING)

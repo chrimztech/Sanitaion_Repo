@@ -36,7 +36,7 @@ public class DemonstrationSite {
   @Column(columnDefinition = "TEXT")
   public String description;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String location;
 
   @Column
@@ -45,7 +45,7 @@ public class DemonstrationSite {
   @Column(name = "site_type")
   public String siteType;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String technology;
 
   @Column(name = "operational_status")
@@ -60,7 +60,7 @@ public class DemonstrationSite {
   @Column
   public String contactEmail;
 
-  @Column
+  @Column(columnDefinition = "TEXT")
   public String partnerInstitution;
 
   @Column
