@@ -10,6 +10,7 @@ import com.unza.ubirr.model.ContentItem;
 import com.unza.ubirr.model.ContentStatus;
 import com.unza.ubirr.model.DownloadRecord;
 import com.unza.ubirr.model.EventEntity;
+import com.unza.ubirr.model.TrainingSession;
 import com.unza.ubirr.model.Review;
 import com.unza.ubirr.model.ViewRecord;
 import com.unza.ubirr.model.DemonstrationSite;
@@ -117,7 +118,11 @@ public class PublicService {
     long totalResources = contentItemRepository.count(publicContentSpec(null, null, null));
     long activeSites = siteRepository.countByOperationalStatus("active");
     long totalSites = siteRepository.count();
-    long trainingMaterials = contentItemRepository.count(publicContentSpec(null, "training_material", null));
+    // "Training" on the homepage reflects the actual Training feature (published/completed
+    // sessions on /training), not the separate "training_material" library content type,
+    // which nobody tags resources with — that previously made this stat always read 0.
+    long trainingMaterials = trainingSessionRepository.countByStatusIn(
+      List.of(ContentStatus.PUBLISHED, ContentStatus.COMPLETED));
     long research = contentItemRepository.count(publicContentSpec(null, "research_data", null))
       + contentItemRepository.count(publicContentSpec(null, "journal_article", null))
       + contentItemRepository.count(publicContentSpec(null, "thesis", null))
@@ -597,13 +602,26 @@ public class PublicService {
   public List<PublicDtos.TrainingSessionPublicDto> publicTrainingSessions() {
     return trainingSessionRepository.findByStatusIn(List.of(ContentStatus.PUBLISHED, ContentStatus.COMPLETED)).stream()
       .sorted(Comparator.comparing(s -> s.startDate))
-      .map(s -> new PublicDtos.TrainingSessionPublicDto(
-        s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
-        s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
-        s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt,
-        trainingRegistrationRepository.countActiveBySessionId(s.id),
-        s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
-      ))
+      .map(this::trainingSessionDto)
       .toList();
+  }
+
+  public PublicDtos.TrainingSessionPublicDto trainingSessionBySlug(String slug) {
+    TrainingSession session = trainingSessionRepository.findBySlug(slug)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Training session not found"));
+    if (session.status != ContentStatus.PUBLISHED && session.status != ContentStatus.COMPLETED) {
+      throw new ResponseStatusException(NOT_FOUND, "Training session not found");
+    }
+    return trainingSessionDto(session);
+  }
+
+  private PublicDtos.TrainingSessionPublicDto trainingSessionDto(TrainingSession s) {
+    return new PublicDtos.TrainingSessionPublicDto(
+      s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
+      s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
+      s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt,
+      trainingRegistrationRepository.countActiveBySessionId(s.id),
+      s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
+    );
   }
 }

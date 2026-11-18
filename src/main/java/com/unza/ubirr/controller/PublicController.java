@@ -100,6 +100,11 @@ public class PublicController {
     return publicService.publicTrainingSessions();
   }
 
+  @GetMapping("/training/{slug}")
+  public PublicDtos.TrainingSessionPublicDto trainingSession(@PathVariable String slug) {
+    return publicService.trainingSessionBySlug(slug);
+  }
+
   @GetMapping("/sites")
   public List<PublicDtos.DemonstrationSiteDto> sites() {
     return publicService.publicSites();

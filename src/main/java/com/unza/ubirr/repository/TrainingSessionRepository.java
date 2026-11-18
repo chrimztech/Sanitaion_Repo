@@ -12,4 +12,5 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
   boolean existsBySlug(String slug);
   List<TrainingSession> findByStatus(ContentStatus status);
   List<TrainingSession> findByStatusIn(List<ContentStatus> statuses);
+  long countByStatusIn(List<ContentStatus> statuses);
 }
