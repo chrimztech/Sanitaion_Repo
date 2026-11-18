@@ -1,5 +1,6 @@
 package com.unza.ubirr.service;
 
+import org.hibernate.Hibernate;
 import com.unza.ubirr.dto.PublicDtos;
 import com.unza.ubirr.model.AccessLevel;
 import com.unza.ubirr.model.AppRole;
@@ -573,8 +574,15 @@ public class PublicService {
     if (authContextService.canManageContent(user)) {
       return true;
     }
-    if (item.author != null && item.author.id.equals(user.id)) {
-      return true;
+    // item may have been loaded without JOIN FETCHing author (e.g. via findBySlug), in
+    // which case author is an uninitialized lazy proxy — direct field access on it (this
+    // codebase uses public fields, not getters, so Hibernate can't intercept the read)
+    // returns a blank id instead of triggering the fetch. Force initialization first.
+    if (item.author != null) {
+      Hibernate.initialize(item.author);
+      if (item.author.id.equals(user.id)) {
+        return true;
+      }
     }
     if (item.status != ContentStatus.PUBLISHED) {
       return false;

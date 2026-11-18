@@ -272,7 +272,11 @@ public class AdminService {
   public void transitionContent(UUID id, AdminDtos.ContentTransitionRequest request) {
     authContextService.requireContentManager();
     AppUser user = authContextService.requireUser();
-    ContentItem item = contentItemRepository.findById(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
+    // findByIdForAdmin (not plain findById) — item.author is read via direct field access
+    // below, and a lazy, un-fetched author proxy returns a blank id on that kind of read
+    // instead of triggering initialization, which previously NPE'd whenever the item's
+    // author wasn't already the same user loaded elsewhere in this request.
+    ContentItem item = contentItemRepository.findByIdForAdmin(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
     ContentStatus nextStatus = switch (request.action().trim().toLowerCase()) {
       case "submit" -> ContentStatus.SUBMITTED;
       case "approve", "approved" -> ContentStatus.APPROVED;
