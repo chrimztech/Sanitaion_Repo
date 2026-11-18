@@ -148,7 +148,7 @@ public class AdminController {
   @PutMapping("/events/registrations/{registrationId}/status")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void updateEventRegistrationStatus(@PathVariable UUID registrationId, @Valid @RequestBody AdminDtos.UpdateRegistrationStatusRequest request) {
-    adminService.updateEventRegistrationStatus(registrationId, request.status());
+    adminService.updateEventRegistrationStatus(registrationId, request.status(), request.note());
   }
 
   @PostMapping("/events/{id}/image")
@@ -492,7 +492,7 @@ public class AdminController {
   @PutMapping("/training/registrations/{registrationId}/status")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void updateTrainingRegistrationStatus(@PathVariable UUID registrationId, @Valid @RequestBody AdminDtos.UpdateRegistrationStatusRequest request) {
-    adminService.updateTrainingRegistrationStatus(registrationId, request.status());
+    adminService.updateTrainingRegistrationStatus(registrationId, request.status(), request.note());
   }
 
   @PostMapping("/training/{id}/image")

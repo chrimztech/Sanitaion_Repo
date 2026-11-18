@@ -294,21 +294,24 @@ public class AccountService {
     return sessions.stream()
       .map(s -> {
         long count = trainingRegistrationRepository.countActiveBySessionId(s.id);
-        boolean registered = trainingRegistrationRepository
+        String registrationStatus = trainingRegistrationRepository
           .findBySessionIdAndUserId(s.id, user.id)
-          .map(r -> "registered".equals(r.status))
-          .orElse(false);
+          .map(r -> r.status)
+          .orElse(null);
         return new AccountDtos.TrainingSessionPublicDto(
           s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
           s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
           s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt,
-          count, registered,
+          count, registrationStatus,
           s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
         );
       })
       .toList();
   }
 
+  // Registering never auto-confirms a seat — it starts "pending" until an organiser
+  // reviews it, so the applicant gets an explicit accept/reject decision rather than
+  // silently assuming they're in.
   public void registerForTraining(UUID sessionId) {
     AppUser user = authContextService.requireUser();
     TrainingSession session = trainingSessionRepository.findById(sessionId)
@@ -318,11 +321,20 @@ public class AccountService {
     }
     var existing = trainingRegistrationRepository.findBySessionIdAndUserId(sessionId, user.id);
     if (existing.isPresent()) {
-      if ("registered".equals(existing.get().status)) {
+      String current = existing.get().status;
+      if ("pending".equals(current) || "approved".equals(current)) {
         throw new ResponseStatusException(CONFLICT, "Already registered for this session");
       }
-      existing.get().status = "registered";
+      if (session.capacity != null) {
+        long count = trainingRegistrationRepository.countActiveBySessionId(sessionId);
+        if (count >= session.capacity) {
+          throw new ResponseStatusException(BAD_REQUEST, "This training session is fully booked");
+        }
+      }
+      existing.get().status = "pending";
       trainingRegistrationRepository.save(existing.get());
+      notifyUser(user, "Registration submitted",
+        "Your request to join \"" + session.title + "\" is pending review.", "/training");
       return;
     }
     if (session.capacity != null) {
@@ -334,10 +346,10 @@ public class AccountService {
     TrainingRegistration reg = new TrainingRegistration();
     reg.session = session;
     reg.user = user;
-    reg.status = "registered";
+    reg.status = "pending";
     trainingRegistrationRepository.save(reg);
-    notifyUser(user, "Registration confirmed",
-      "You're registered for \"" + session.title + "\" on " + session.startDate + ".", "/training");
+    notifyUser(user, "Registration submitted",
+      "Your request to join \"" + session.title + "\" is pending review.", "/training");
   }
 
   public void cancelTrainingRegistration(UUID sessionId) {
@@ -374,21 +386,22 @@ public class AccountService {
     return events.stream()
       .map(e -> {
         long count = eventRegistrationRepository.countActiveByEventId(e.id);
-        boolean registered = eventRegistrationRepository
+        String registrationStatus = eventRegistrationRepository
           .findByEventIdAndUserId(e.id, user.id)
-          .map(r -> "registered".equals(r.status))
-          .orElse(false);
+          .map(r -> r.status)
+          .orElse(null);
         return new AccountDtos.EventPublicDto(
           e.id, e.title, e.slug, e.description, e.venue,
           e.startDate, e.endDate, e.startTime, e.endTime,
           e.organizer, e.contactEmail, e.registrationLink, e.status.apiValue(), e.publishedAt,
-          count, registered,
+          count, registrationStatus,
           e.bannerImagePath != null ? "/api/files/event/" + e.id + "/image" : null
         );
       })
       .toList();
   }
 
+  // Same pending-until-reviewed model as training — see registerForTraining.
   public void registerForEvent(UUID eventId) {
     AppUser user = authContextService.requireUser();
     EventEntity event = eventRepository.findById(eventId)
@@ -398,22 +411,23 @@ public class AccountService {
     }
     var existing = eventRegistrationRepository.findByEventIdAndUserId(eventId, user.id);
     if (existing.isPresent()) {
-      if ("registered".equals(existing.get().status)) {
+      String current = existing.get().status;
+      if ("pending".equals(current) || "approved".equals(current)) {
         throw new ResponseStatusException(CONFLICT, "Already registered for this event");
       }
-      existing.get().status = "registered";
+      existing.get().status = "pending";
       eventRegistrationRepository.save(existing.get());
-      notifyUser(user, "Registration confirmed",
-        "You're registered for \"" + event.title + "\" on " + event.startDate + ".", "/events");
+      notifyUser(user, "Registration submitted",
+        "Your request to join \"" + event.title + "\" is pending review.", "/events");
       return;
     }
     EventRegistration reg = new EventRegistration();
     reg.event = event;
     reg.user = user;
-    reg.status = "registered";
+    reg.status = "pending";
     eventRegistrationRepository.save(reg);
-    notifyUser(user, "Registration confirmed",
-      "You're registered for \"" + event.title + "\" on " + event.startDate + ".", "/events");
+    notifyUser(user, "Registration submitted",
+      "Your request to join \"" + event.title + "\" is pending review.", "/events");
   }
 
   public void cancelEventRegistration(UUID eventId) {

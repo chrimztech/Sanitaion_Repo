@@ -457,7 +457,9 @@ public class AdminService {
   public List<AdminDtos.EventAdminDto> events() {
     authContextService.requireContentManager();
     return eventRepository.findAll(Sort.by(Sort.Direction.DESC, "startDate")).stream()
-      .map(e -> eventAdminDto(e, eventRegistrationRepository.countActiveByEventId(e.id)))
+      .map(e -> eventAdminDto(e,
+        eventRegistrationRepository.countActiveByEventId(e.id),
+        eventRegistrationRepository.countPendingByEventId(e.id)))
       .toList();
   }
 
@@ -475,15 +477,17 @@ public class AdminService {
       .toList();
   }
 
-  public void updateEventRegistrationStatus(UUID registrationId, String status) {
+  public void updateEventRegistrationStatus(UUID registrationId, String status, String note) {
     authContextService.requireContentManager();
     if (!REGISTRATION_STATUSES.contains(status)) {
       throw new ResponseStatusException(BAD_REQUEST, "Invalid status");
     }
-    EventRegistration reg = eventRegistrationRepository.findById(registrationId)
+    EventRegistration reg = eventRegistrationRepository.findByIdWithDetails(registrationId)
       .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Registration not found"));
+    if (status.equals(reg.status)) return;
     reg.status = status;
     eventRegistrationRepository.save(reg);
+    notifyRegistrationDecision(reg.user, reg.event.title, status, note, "/events");
   }
 
   public AdminDtos.EventAdminDto saveEvent(UUID id, AdminDtos.SaveEventRequest request) {
@@ -511,7 +515,9 @@ public class AdminService {
     }
     EventEntity saved = eventRepository.save(event);
     auditService.log(user, id == null ? "event.create" : "event.update", "events", saved.id.toString());
-    return eventAdminDto(saved, eventRegistrationRepository.countActiveByEventId(saved.id));
+    return eventAdminDto(saved,
+      eventRegistrationRepository.countActiveByEventId(saved.id),
+      eventRegistrationRepository.countPendingByEventId(saved.id));
   }
 
   @CacheEvict(value = "public-events", allEntries = true)
@@ -1203,7 +1209,7 @@ public class AdminService {
     auditService.log(actor, "user.password.reset", "users", userId.toString());
   }
 
-  private AdminDtos.EventAdminDto eventAdminDto(EventEntity event, long regCount) {
+  private AdminDtos.EventAdminDto eventAdminDto(EventEntity event, long regCount, long pendingCount) {
     return new AdminDtos.EventAdminDto(
       event.id,
       event.title,
@@ -1221,6 +1227,7 @@ public class AdminService {
       event.status.apiValue(),
       event.publishedAt,
       regCount,
+      pendingCount,
       event.bannerImagePath != null ? "/api/files/event/" + event.id + "/image" : null
     );
   }
@@ -1403,7 +1410,9 @@ public class AdminService {
   public List<AdminDtos.TrainingSessionDto> adminTrainingSessions() {
     authContextService.requireContentManager();
     return trainingSessionRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt")).stream()
-      .map(s -> trainingSessionDto(s, trainingRegistrationRepository.countActiveBySessionId(s.id)))
+      .map(s -> trainingSessionDto(s,
+        trainingRegistrationRepository.countActiveBySessionId(s.id),
+        trainingRegistrationRepository.countPendingBySessionId(s.id)))
       .toList();
   }
 
@@ -1438,7 +1447,9 @@ public class AdminService {
     }
     session = trainingSessionRepository.save(session);
     auditService.log(user, id == null ? "training.create" : "training.update", "training_sessions", session.id.toString());
-    return trainingSessionDto(session, trainingRegistrationRepository.countActiveBySessionId(session.id));
+    return trainingSessionDto(session,
+      trainingRegistrationRepository.countActiveBySessionId(session.id),
+      trainingRegistrationRepository.countPendingBySessionId(session.id));
   }
 
   public void publishTrainingSession(UUID id) {
@@ -1473,17 +1484,58 @@ public class AdminService {
       .toList();
   }
 
-  private static final List<String> REGISTRATION_STATUSES = List.of("registered", "attended", "cancelled");
+  private static final List<String> REGISTRATION_STATUSES =
+    List.of("pending", "approved", "rejected", "cancelled", "attended");
 
-  public void updateTrainingRegistrationStatus(UUID registrationId, String status) {
+  public void updateTrainingRegistrationStatus(UUID registrationId, String status, String note) {
     authContextService.requireContentManager();
     if (!REGISTRATION_STATUSES.contains(status)) {
       throw new ResponseStatusException(BAD_REQUEST, "Invalid status");
     }
-    TrainingRegistration reg = trainingRegistrationRepository.findById(registrationId)
+    TrainingRegistration reg = trainingRegistrationRepository.findByIdWithDetails(registrationId)
       .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Registration not found"));
+    if (status.equals(reg.status)) return;
     reg.status = status;
     trainingRegistrationRepository.save(reg);
+    notifyRegistrationDecision(reg.user, reg.session.title, status, note, "/training");
+  }
+
+  // Gives the applicant an explicit outcome for every admin-made decision — this is the
+  // "feedback loop" the registration flow is built around, not just a silent status flip.
+  private void notifyRegistrationDecision(AppUser user, String activityTitle, String status, String note, String link) {
+    String title;
+    String message;
+    switch (status) {
+      case "approved" -> {
+        title = "Registration approved";
+        message = "You're confirmed for \"" + activityTitle + "\".";
+      }
+      case "rejected" -> {
+        title = "Registration not approved";
+        message = "Your request to join \"" + activityTitle + "\" was not approved.";
+      }
+      case "attended" -> {
+        title = "Attendance recorded";
+        message = "You've been marked as attended for \"" + activityTitle + "\". Thank you for participating!";
+      }
+      case "cancelled" -> {
+        title = "Registration cancelled";
+        message = "Your registration for \"" + activityTitle + "\" was cancelled by an organiser.";
+      }
+      default -> {
+        title = "Registration updated";
+        message = "Your registration for \"" + activityTitle + "\" is now " + status + ".";
+      }
+    }
+    if (note != null && !note.isBlank()) {
+      message += " Note: " + note.trim();
+    }
+    Notification n = new Notification();
+    n.user = user;
+    n.title = title;
+    n.message = message;
+    n.link = link;
+    notificationRepository.save(n);
   }
 
   private String uniqueTrainingSlug(UUID id, String requestedSlug, String name) {
@@ -1499,11 +1551,11 @@ public class AdminService {
     return candidate;
   }
 
-  private AdminDtos.TrainingSessionDto trainingSessionDto(TrainingSession s, long regCount) {
+  private AdminDtos.TrainingSessionDto trainingSessionDto(TrainingSession s, long regCount, long pendingCount) {
     return new AdminDtos.TrainingSessionDto(
       s.id, s.title, s.slug, s.description, s.mode, s.venue, s.instructor,
       s.startDate, s.endDate, s.startTime, s.endTime, s.capacity,
-      s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt, s.createdAt, regCount,
+      s.requirements, s.contactEmail, s.status.apiValue(), s.publishedAt, s.createdAt, regCount, pendingCount,
       s.imagePath != null ? "/api/files/training/" + s.id + "/image" : null
     );
   }
@@ -1664,6 +1716,9 @@ public class AdminService {
     banner.title = req.title().trim();
     banner.subtitle = req.subtitle();
     banner.linkUrl = req.linkUrl();
+    if (req.displayMode() != null && !req.displayMode().isBlank()) {
+      banner.displayMode = req.displayMode();
+    }
     banner.displayOrder = req.displayOrder() != null ? req.displayOrder() : 0;
     if (req.active() != null) banner.active = req.active();
     banner = heroBannerRepository.save(banner);
@@ -1698,7 +1753,7 @@ public class AdminService {
     return new AdminDtos.HeroBannerDto(
       b.id, b.title, b.subtitle,
       b.imagePath != null ? "/api/files/banner/" + b.id + "/image" : null,
-      b.linkUrl, b.displayOrder, b.active, b.createdAt, b.updatedAt
+      b.linkUrl, b.displayMode, b.displayOrder, b.active, b.createdAt, b.updatedAt
     );
   }
 

@@ -21,6 +21,14 @@ public interface TrainingRegistrationRepository extends JpaRepository<TrainingRe
   @Query("SELECT r FROM TrainingRegistration r JOIN FETCH r.session WHERE r.user.id = :userId ORDER BY r.registeredAt DESC")
   List<TrainingRegistration> findByUserId(UUID userId);
 
-  @Query("SELECT COUNT(r) FROM TrainingRegistration r WHERE r.session.id = :sessionId AND r.status = 'registered'")
+  @Query("SELECT r FROM TrainingRegistration r JOIN FETCH r.user JOIN FETCH r.session WHERE r.id = :id")
+  Optional<TrainingRegistration> findByIdWithDetails(UUID id);
+
+  // A pending request still holds a seat until an admin decides, so capacity checks
+  // and the "active" count treat pending + approved as occupying the roster.
+  @Query("SELECT COUNT(r) FROM TrainingRegistration r WHERE r.session.id = :sessionId AND r.status IN ('pending', 'approved')")
   long countActiveBySessionId(UUID sessionId);
+
+  @Query("SELECT COUNT(r) FROM TrainingRegistration r WHERE r.session.id = :sessionId AND r.status = 'pending'")
+  long countPendingBySessionId(UUID sessionId);
 }

@@ -133,7 +133,7 @@ public final class AccountDtos {
     String status,
     Instant publishedAt,
     long registrationCount,
-    boolean registered,
+    String registrationStatus,
     String imageUrl
   ) {
   }
@@ -165,7 +165,7 @@ public final class AccountDtos {
     String status,
     Instant publishedAt,
     long registrationCount,
-    boolean registered,
+    String registrationStatus,
     String bannerImageUrl
   ) {
   }

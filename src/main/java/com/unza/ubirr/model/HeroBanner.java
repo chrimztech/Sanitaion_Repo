@@ -34,6 +34,12 @@ public class HeroBanner {
   @Column(columnDefinition = "TEXT")
   public String linkUrl;
 
+  // "overlay" = photo background behind the site's fixed tagline/search (default).
+  // "flyer" = a self-contained promotional image (its own text/design already baked
+  // in) shown edge-to-edge with no dark scrim or competing site copy on top.
+  @Column(name = "display_mode", nullable = false)
+  public String displayMode = "overlay";
+
   @Column(name = "display_order")
   public int displayOrder = 0;
 

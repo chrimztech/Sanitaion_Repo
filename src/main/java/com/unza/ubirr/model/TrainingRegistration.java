@@ -33,7 +33,7 @@ public class TrainingRegistration {
   public AppUser user;
 
   @Column(nullable = false)
-  public String status = "registered"; // registered, cancelled, attended
+  public String status = "pending"; // pending, approved, rejected, cancelled, attended
 
   @CreationTimestamp
   @Column(nullable = false, updatable = false)

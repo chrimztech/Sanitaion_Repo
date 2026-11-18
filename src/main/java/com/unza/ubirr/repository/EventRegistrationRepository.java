@@ -17,6 +17,12 @@ public interface EventRegistrationRepository extends JpaRepository<EventRegistra
   @Query("SELECT r FROM EventRegistration r JOIN FETCH r.event WHERE r.user.id = :userId ORDER BY r.registeredAt DESC")
   List<EventRegistration> findByUserId(UUID userId);
 
-  @Query("SELECT COUNT(r) FROM EventRegistration r WHERE r.event.id = :eventId AND r.status = 'registered'")
+  @Query("SELECT r FROM EventRegistration r JOIN FETCH r.user JOIN FETCH r.event WHERE r.id = :id")
+  Optional<EventRegistration> findByIdWithDetails(UUID id);
+
+  @Query("SELECT COUNT(r) FROM EventRegistration r WHERE r.event.id = :eventId AND r.status IN ('pending', 'approved')")
   long countActiveByEventId(UUID eventId);
+
+  @Query("SELECT COUNT(r) FROM EventRegistration r WHERE r.event.id = :eventId AND r.status = 'pending'")
+  long countPendingByEventId(UUID eventId);
 }

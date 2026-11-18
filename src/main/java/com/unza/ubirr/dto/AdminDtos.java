@@ -122,6 +122,7 @@ public final class AdminDtos {
     String status,
     Instant publishedAt,
     long registrationCount,
+    long pendingCount,
     String bannerImageUrl
   ) {
   }
@@ -218,7 +219,8 @@ public final class AdminDtos {
 
   public record UpdateRegistrationStatusRequest(
     @NotBlank(message = "Status is required")
-    String status
+    String status,
+    String note
   ) {
   }
 
@@ -408,6 +410,7 @@ public final class AdminDtos {
     Instant publishedAt,
     Instant createdAt,
     long registrationCount,
+    long pendingCount,
     String imageUrl
   ) {
   }
@@ -499,6 +502,7 @@ public final class AdminDtos {
     String subtitle,
     String imageUrl,
     String linkUrl,
+    String displayMode,
     int displayOrder,
     boolean active,
     Instant createdAt,
@@ -511,6 +515,7 @@ public final class AdminDtos {
     String title,
     String subtitle,
     String linkUrl,
+    String displayMode,
     Integer displayOrder,
     Boolean active
   ) {
