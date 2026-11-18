@@ -74,6 +74,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
@@ -344,11 +345,30 @@ public class AdminService {
     authContextService.requireContentManager();
     AppUser user = authContextService.requireUser();
     ContentItem item = contentItemRepository.findById(contentId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
+    String originalFileName = multipartFile.getOriginalFilename() != null ? multipartFile.getOriginalFilename() : "upload";
     StorageService.StoredFile storedFile = storageService.storeContentFile(contentId, multipartFile);
+
+    // Duplicate detection — an exact byte-for-byte match anywhere else is always rejected;
+    // a same name + same size file is only treated as a duplicate when the two resources
+    // also share an author and a publication year, since filename/size alone can coincide
+    // by chance (e.g. two different scanned forms both named "scan.pdf").
+    ContentItem duplicateOf = contentFileRepository.findFirstByChecksumExcludingItem(storedFile.checksum(), contentId)
+      .map(f -> f.contentItem)
+      .orElseGet(() -> contentFileRepository.findByFileNameAndSizeExcludingItem(originalFileName, storedFile.size(), contentId).stream()
+        .map(f -> f.contentItem)
+        .filter(other -> sameYear(other.publicationDate, item.publicationDate))
+        .filter(other -> sameAuthors(other.authors, item.authors))
+        .findFirst()
+        .orElse(null));
+    if (duplicateOf != null) {
+      storageService.delete(storedFile.relativePath());
+      throw new ResponseStatusException(CONFLICT,
+        "This file appears to already be uploaded as part of \"" + duplicateOf.title + "\". Delete it there first if this is truly a different resource.");
+    }
 
     ContentFile file = new ContentFile();
     file.contentItem = item;
-    file.originalFileName = multipartFile.getOriginalFilename() != null ? multipartFile.getOriginalFilename() : "upload";
+    file.originalFileName = originalFileName;
     file.storedFileName = storedFile.storedFileName();
     file.filePath = storedFile.relativePath();
     file.fileType = storedFile.mimeType() != null && storedFile.mimeType().contains("/") ? storedFile.mimeType().split("/")[0] : null;
@@ -376,6 +396,17 @@ public class AdminService {
 
     auditService.log(user, "content.file.upload", "content_files", file.id.toString());
     return new PublicDtos.ContentFileDto(file.id, file.originalFileName, file.mimeType, file.fileSize, "/api/files/" + file.id + "/preview", "/api/files/" + file.id + "/download");
+  }
+
+  private boolean sameYear(java.time.LocalDate a, java.time.LocalDate b) {
+    return a != null && b != null && a.getYear() == b.getYear();
+  }
+
+  private boolean sameAuthors(String a, String b) {
+    if (a == null || b == null) return false;
+    String na = a.trim().toLowerCase();
+    String nb = b.trim().toLowerCase();
+    return !na.isEmpty() && na.equals(nb);
   }
 
   public AdminDtos.DigitizationDto uploadScanFile(UUID recordId, MultipartFile multipartFile) {
@@ -1099,6 +1130,16 @@ public class AdminService {
     item.thumbnailPath = storageService.storeThumbnail(id, file);
     contentItemRepository.save(item);
     return "/api/files/thumbnail/" + id;
+  }
+
+  public void deleteThumbnail(UUID id) {
+    authContextService.requireContentManager();
+    ContentItem item = contentItemRepository.findById(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
+    if (item.thumbnailPath != null) {
+      storageService.delete(item.thumbnailPath);
+      item.thumbnailPath = null;
+      contentItemRepository.save(item);
+    }
   }
 
   public void updateUserStatus(UUID userId, String status) {

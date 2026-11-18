@@ -102,6 +102,12 @@ public class AdminController {
     return java.util.Map.of("url", url);
   }
 
+  @DeleteMapping("/content/{id}/thumbnail")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void deleteThumbnail(@PathVariable UUID id) {
+    adminService.deleteThumbnail(id);
+  }
+
   @GetMapping("/approvals")
   public List<AdminDtos.ApprovalItemDto> approvals() {
     return adminService.approvals();
