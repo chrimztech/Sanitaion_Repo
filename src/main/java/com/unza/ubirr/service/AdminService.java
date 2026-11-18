@@ -617,7 +617,11 @@ public class AdminService {
   }
 
   public List<AdminDtos.TaxonomyEntryDto> taxonomy(String type) {
-    authContextService.requireAdmin();
+    // Reading the taxonomy (to populate the Category/Department/etc. pickers in the content
+    // editor) only needs content-manager access — the same level required to create or edit
+    // a resource in the first place. Editing the taxonomy catalog itself (save/update/delete
+    // below) stays admin-only.
+    authContextService.requireContentManager();
     return switch (type.toLowerCase()) {
       case "categories" -> categoryRepository.findAll(Sort.by("name")).stream()
         .map(category -> new AdminDtos.TaxonomyEntryDto(category.id, category.name, category.slug, category.description, null, null))
@@ -1335,6 +1339,10 @@ public class AdminService {
   }
 
   public String getScanFilePath(UUID recordId) {
+    // Unlike every other digitization action (upload, status changes, deletion), this had
+    // no permission check at all — any authenticated user, including a student, could
+    // download internal archival scans by guessing a record id.
+    authContextService.requireContentManager();
     return digitizationRecordRepository.findById(recordId)
       .map(r -> r.scannedFilePath)
       .orElse(null);
