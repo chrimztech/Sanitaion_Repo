@@ -37,10 +37,19 @@ public final class PublicDtos {
     String contentType,
     String accessLevel,
     Instant publishedAt,
+    Integer publicationYear,
     String thumbnailUrl,
     String categorySlug,
     double averageRating,
     long reviewCount
+  ) {
+  }
+
+  public record ResourcePageDto(
+    List<ResourceSummaryDto> items,
+    long total,
+    int page,
+    int pageSize
   ) {
   }
 
@@ -60,7 +69,7 @@ public final class PublicDtos {
     String keywords,
     String authors,
     String publisher,
-    LocalDate publicationDate,
+    Integer publicationYear,
     LocalDate activityDate,
     String sourceInstitution,
     String externalIdentifier,

@@ -46,13 +46,15 @@ public class PublicController {
   }
 
   @GetMapping("/resources")
-  public List<PublicDtos.ResourceSummaryDto> resources(
+  public PublicDtos.ResourcePageDto resources(
     @RequestParam(defaultValue = "") String q,
     @RequestParam(defaultValue = "all") String type,
     @RequestParam(required = false) String category,
-    @RequestParam(required = false) UUID department
+    @RequestParam(required = false) UUID department,
+    @RequestParam(defaultValue = "0") int page,
+    @RequestParam(defaultValue = "20") int pageSize
   ) {
-    return publicService.publicResources(q, type, category, department);
+    return publicService.publicResourcesPaged(q, type, category, department, page, pageSize);
   }
 
   @GetMapping("/departments")

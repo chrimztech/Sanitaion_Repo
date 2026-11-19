@@ -98,9 +98,12 @@ public class ContentItem {
   @Column(columnDefinition = "TEXT")
   public String publisher;
 
-  // Date the resource was originally published (may differ from system publishedAt)
+  // Year the resource was originally published (may differ from system publishedAt). Most
+  // library/citation metadata only ever records a year, not a specific day — storing a
+  // plain year instead of a fabricated LocalDate avoids pretending to know a day/month
+  // that was never actually given.
   @Column
-  public LocalDate publicationDate;
+  public Integer publicationYear;
 
   // Date the activity/event described in the resource took place
   @Column

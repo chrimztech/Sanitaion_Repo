@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -166,33 +167,48 @@ public class PublicService {
     return publicResources(query, type, category, null);
   }
 
+  // Internal/curated-listing use (home page, RSS, sitemap, gallery, category counts) — a flat
+  // list is all those need, so this keeps its original unpaginated shape and default page size.
   // Cached — this is the highest-traffic read (library browse/search). Key must include the
   // logged-in flag: browse results differ (UNIVERSITY-level items are only included for
   // authenticated users), so caching without it would leak gated content to anonymous users.
   @Cacheable(value = "public-resources",
     key = "(#query == null ? '' : #query) + '|' + #type + '|' + (#category == null ? '' : #category) + '|' + #departmentId + '|' + @authContextService.isAuthenticated()")
   public List<PublicDtos.ResourceSummaryDto> publicResources(String query, String type, String category, UUID departmentId) {
+    return publicResourcesPaged(query, type, category, departmentId, 0, 60).items();
+  }
+
+  private static final int MAX_PAGE_SIZE = 60;
+
+  // The actual Library search/browse endpoint — paginated, with a total count so the
+  // frontend can render real page controls ("Showing 1-20 of 143") instead of silently
+  // truncating anything past a hardcoded limit.
+  @Cacheable(value = "public-resources-page",
+    key = "(#query == null ? '' : #query) + '|' + #type + '|' + (#category == null ? '' : #category) + '|' + #departmentId + '|' + #page + '|' + #pageSize + '|' + @authContextService.isAuthenticated()")
+  public PublicDtos.ResourcePageDto publicResourcesPaged(String query, String type, String category, UUID departmentId, int page, int pageSize) {
     boolean loggedIn = authContextService.isAuthenticated();
+    int safePage = Math.max(page, 0);
+    int safePageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
     String contentType = null;
     if (type != null && !type.isBlank() && !"all".equalsIgnoreCase(type)) {
       contentType = type.trim().toLowerCase().replace('-', '_');
     }
+    String categorySlug = (category != null && !category.isBlank()) ? category : null;
+    String departmentIdStr = departmentId != null ? departmentId.toString() : null;
 
     // Use GIN-indexed FTS with relevance ranking when a search query is present
     if (query != null && !query.isBlank()) {
-      return summarizeAll(contentItemRepository.fullTextSearch(
-          query,
-          (category != null && !category.isBlank()) ? category : null,
-          contentType,
-          departmentId != null ? departmentId.toString() : null
-        ));
+      List<ContentItem> rows = contentItemRepository.fullTextSearch(
+        query, categorySlug, contentType, departmentIdStr, loggedIn, safePageSize, safePage * safePageSize);
+      long total = contentItemRepository.fullTextSearchCount(query, categorySlug, contentType, departmentIdStr, loggedIn);
+      return new PublicDtos.ResourcePageDto(summarizeAll(rows), total, safePage, safePageSize);
     }
 
     // No query — standard JPA Specification (date-ordered browse)
-    return summarizeAll(contentItemRepository.findAll(
-        publicContentSpec(null, contentType, category, departmentId, loggedIn),
-        PageRequest.of(0, 60, Sort.by(Sort.Direction.DESC, "publishedAt"))
-      ).getContent());
+    Page<ContentItem> result = contentItemRepository.findAll(
+      publicContentSpec(null, contentType, categorySlug, departmentId, loggedIn),
+      PageRequest.of(safePage, safePageSize, Sort.by(Sort.Direction.DESC, "publishedAt")));
+    return new PublicDtos.ResourcePageDto(summarizeAll(result.getContent()), result.getTotalElements(), safePage, safePageSize);
   }
 
   @Cacheable("public-departments")
@@ -258,7 +274,7 @@ public class PublicService {
       item.keywords,
       item.authors,
       item.publisher,
-      item.publicationDate,
+      item.publicationYear,
       item.activityDate,
       item.sourceInstitution,
       item.externalIdentifier,
@@ -483,6 +499,7 @@ public class PublicService {
       item.contentType,
       item.accessLevel.apiValue(),
       item.publishedAt,
+      item.publicationYear,
       thumbnail,
       item.category != null ? item.category.slug : null,
       rating != null ? rating.getAvgRating() : 0,

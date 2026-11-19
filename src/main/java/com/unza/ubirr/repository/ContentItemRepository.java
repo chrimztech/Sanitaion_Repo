@@ -31,10 +31,14 @@ public interface ContentItemRepository extends JpaRepository<ContentItem, UUID>,
   @Query("SELECT c FROM ContentItem c LEFT JOIN FETCH c.category LEFT JOIN FETCH c.department LEFT JOIN FETCH c.author WHERE c.id = :id")
   Optional<ContentItem> findByIdForAdmin(@Param("id") UUID id);
 
+  // includeUniversity lets an authenticated university user's search reach UNIVERSITY-level
+  // items too — without it, searching returned a strictly narrower result set than browsing
+  // the same filters produced for the same logged-in user (which uses publicContentSpec and
+  // already includes UNIVERSITY access there).
   @Query(value = """
       SELECT * FROM content_items
       WHERE  status       = 'PUBLISHED'
-        AND  access_level = 'PUBLIC'
+        AND  (access_level = 'PUBLIC' OR (:includeUniversity AND access_level = 'UNIVERSITY'))
         AND  deleted_at   IS NULL
         AND  search_vector @@ plainto_tsquery('english', :query)
         AND  (:categorySlug  IS NULL OR category_id   = (SELECT id FROM categories  WHERE slug = :categorySlug))
@@ -42,12 +46,33 @@ public interface ContentItemRepository extends JpaRepository<ContentItem, UUID>,
         AND  (:departmentId  IS NULL OR department_id = CAST(:departmentId AS uuid))
       ORDER BY ts_rank(search_vector, plainto_tsquery('english', :query)) DESC,
                published_at DESC
-      LIMIT 60
+      LIMIT :pageSize OFFSET :offset
       """, nativeQuery = true)
   List<ContentItem> fullTextSearch(
       @Param("query") String query,
       @Param("categorySlug") String categorySlug,
       @Param("contentType") String contentType,
-      @Param("departmentId") String departmentId
+      @Param("departmentId") String departmentId,
+      @Param("includeUniversity") boolean includeUniversity,
+      @Param("pageSize") int pageSize,
+      @Param("offset") int offset
+  );
+
+  @Query(value = """
+      SELECT count(*) FROM content_items
+      WHERE  status       = 'PUBLISHED'
+        AND  (access_level = 'PUBLIC' OR (:includeUniversity AND access_level = 'UNIVERSITY'))
+        AND  deleted_at   IS NULL
+        AND  search_vector @@ plainto_tsquery('english', :query)
+        AND  (:categorySlug  IS NULL OR category_id   = (SELECT id FROM categories  WHERE slug = :categorySlug))
+        AND  (:contentType   IS NULL OR content_type  = :contentType)
+        AND  (:departmentId  IS NULL OR department_id = CAST(:departmentId AS uuid))
+      """, nativeQuery = true)
+  long fullTextSearchCount(
+      @Param("query") String query,
+      @Param("categorySlug") String categorySlug,
+      @Param("contentType") String contentType,
+      @Param("departmentId") String departmentId,
+      @Param("includeUniversity") boolean includeUniversity
   );
 }

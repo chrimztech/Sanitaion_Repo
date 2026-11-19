@@ -249,11 +249,15 @@ public class AdminService {
     item.keywords = request.keywords();
     item.authors = request.authors();
     item.publisher = request.publisher();
-    item.publicationDate = request.publicationDate();
+    item.bibliographicInfo = request.bibliographicInfo();
+    // Citation text pasted in wholesale (e.g. "Kapulu, M. (2021). Title...") already carries
+    // the real publication year, but the dedicated field is easy to leave blank when that
+    // happens — fall back to pulling the year out of the citation rather than silently
+    // showing the upload date as the publication date on the public site.
+    item.publicationYear = request.publicationYear() != null ? request.publicationYear() : extractYear(item.bibliographicInfo);
     item.activityDate = request.activityDate();
     item.sourceInstitution = request.sourceInstitution();
     item.externalIdentifier = request.externalIdentifier();
-    item.bibliographicInfo = request.bibliographicInfo();
     item.author = item.author == null ? user : item.author;
     item.category = nullableCategory(request.categoryId());
     item.department = nullableDepartment(request.departmentId());
@@ -356,7 +360,7 @@ public class AdminService {
       .map(f -> f.contentItem)
       .orElseGet(() -> contentFileRepository.findByFileNameAndSizeExcludingItem(originalFileName, storedFile.size(), contentId).stream()
         .map(f -> f.contentItem)
-        .filter(other -> sameYear(other.publicationDate, item.publicationDate))
+        .filter(other -> sameYear(other.publicationYear, item.publicationYear))
         .filter(other -> sameAuthors(other.authors, item.authors))
         .findFirst()
         .orElse(null));
@@ -398,8 +402,16 @@ public class AdminService {
     return new PublicDtos.ContentFileDto(file.id, file.originalFileName, file.mimeType, file.fileSize, "/api/files/" + file.id + "/preview", "/api/files/" + file.id + "/download");
   }
 
-  private boolean sameYear(java.time.LocalDate a, java.time.LocalDate b) {
-    return a != null && b != null && a.getYear() == b.getYear();
+  private boolean sameYear(Integer a, Integer b) {
+    return a != null && b != null && a.equals(b);
+  }
+
+  private static final java.util.regex.Pattern YEAR_PATTERN = java.util.regex.Pattern.compile("(19|20)\\d{2}");
+
+  private Integer extractYear(String text) {
+    if (text == null || text.isBlank()) return null;
+    var matcher = YEAR_PATTERN.matcher(text);
+    return matcher.find() ? Integer.valueOf(matcher.group()) : null;
   }
 
   private boolean sameAuthors(String a, String b) {
@@ -1108,7 +1120,7 @@ public class AdminService {
       item.keywords,
       item.authors,
       item.publisher,
-      item.publicationDate,
+      item.publicationYear,
       item.activityDate,
       item.sourceInstitution,
       item.externalIdentifier,
