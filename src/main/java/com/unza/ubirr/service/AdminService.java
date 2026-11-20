@@ -1186,12 +1186,14 @@ public class AdminService {
     // category/department/author can be an un-fetched lazy proxy here — e.g. uniqueSlug()'s
     // slugExists() loads an unrelated, colliding-slug ContentItem via a plain findBySlug
     // (no JOIN FETCH) earlier in this same transaction, which can leave the *same* category
-    // sitting in the session as an uninitialized proxy; this entity's own public-field access
-    // (no getters) then reads that proxy's default id (null) instead of triggering a fetch.
-    // Force initialization first, same fix as PublicService.canAccess().
-    if (item.category != null) org.hibernate.Hibernate.initialize(item.category);
-    if (item.department != null) org.hibernate.Hibernate.initialize(item.department);
-    if (item.author != null) org.hibernate.Hibernate.initialize(item.author);
+    // sitting in the session as an uninitialized proxy. Hibernate.initialize() alone doesn't
+    // help here: these entities have no getters (field access only), so a proxy has nothing
+    // to override and its own id/name/etc. fields stay at their Java defaults forever, even
+    // once Hibernate has fully loaded the real data into its *internal* target instance.
+    // Hibernate.unproxy() hands back that real, fully-populated instance instead.
+    Category category = item.category != null ? (Category) org.hibernate.Hibernate.unproxy(item.category) : null;
+    Department department = item.department != null ? (Department) org.hibernate.Hibernate.unproxy(item.department) : null;
+    AppUser author = item.author != null ? (AppUser) org.hibernate.Hibernate.unproxy(item.author) : null;
     return new AdminDtos.ContentEditorDto(
       item.id,
       item.title,
@@ -1213,9 +1215,9 @@ public class AdminService {
       item.sourceInstitution,
       item.externalIdentifier,
       item.bibliographicInfo,
-      item.category != null ? item.category.id.toString() : null,
-      item.department != null ? item.department.id.toString() : null,
-      item.author != null ? item.author.id.toString() : null,
+      category != null ? category.id.toString() : null,
+      department != null ? department.id.toString() : null,
+      author != null ? author.id.toString() : null,
       item.publishedAt,
       item.thumbnailPath != null ? "/api/files/thumbnail/" + item.id : null
     );
