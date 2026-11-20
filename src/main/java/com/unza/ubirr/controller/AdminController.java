@@ -291,6 +291,11 @@ public class AdminController {
     return adminService.resourceAccessReport();
   }
 
+  @GetMapping("/reports/uploads")
+  public AdminDtos.UploadsTrackerDto uploadsTracker() {
+    return adminService.uploadsTracker();
+  }
+
   @GetMapping("/reports/download")
   public ResponseEntity<String> downloadReport() {
     String csv = adminService.generateReportCsv();

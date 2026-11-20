@@ -67,6 +67,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -842,6 +843,84 @@ public class AdminService {
       downloadRecordRepository.count(),
       byType,
       recent
+    );
+  }
+
+  // Who uploaded what: per-uploader resource counts/status breakdown/storage, with each
+  // uploader's resources listed for drill-down. author is set once at creation time (see
+  // saveContent) so it reflects who originally submitted the resource.
+  public AdminDtos.UploadsTrackerDto uploadsTracker() {
+    authContextService.requireContentManager();
+    List<ContentItem> items = contentItemRepository.findAllForAdmin();
+    List<UUID> itemIds = items.stream().map(item -> item.id).toList();
+    List<ContentFile> files = itemIds.isEmpty()
+      ? List.of()
+      : contentFileRepository.findByContentItem_IdInOrderByCreatedAtAsc(itemIds);
+    Map<UUID, List<ContentFile>> filesByItem = files.stream()
+      .collect(Collectors.groupingBy(file -> file.contentItem.id));
+
+    Map<UUID, List<ContentItem>> byUploader = items.stream()
+      .filter(item -> item.author != null)
+      .collect(Collectors.groupingBy(item -> item.author.id, LinkedHashMap::new, Collectors.toList()));
+
+    List<AdminDtos.UploaderActivityDto> uploaders = new ArrayList<>();
+    for (List<ContentItem> userItems : byUploader.values()) {
+      AppUser user = userItems.get(0).author;
+      List<AdminDtos.UploadItemDto> itemDtos = userItems.stream()
+        .sorted(Comparator.comparing((ContentItem item) -> item.createdAt).reversed())
+        .map(item -> {
+          List<ContentFile> itemFiles = filesByItem.getOrDefault(item.id, List.of());
+          long bytes = itemFiles.stream().mapToLong(file -> file.fileSize != null ? file.fileSize : 0L).sum();
+          return new AdminDtos.UploadItemDto(
+            item.id,
+            item.title,
+            item.slug,
+            item.contentType,
+            item.status.apiValue(),
+            item.accessLevel.apiValue(),
+            item.publicationYear,
+            item.createdAt,
+            item.publishedAt,
+            itemFiles.size(),
+            bytes,
+            item.category != null ? item.category.name : null,
+            item.department != null ? item.department.name : null
+          );
+        })
+        .toList();
+      long fileCount = itemDtos.stream().mapToLong(AdminDtos.UploadItemDto::fileCount).sum();
+      long totalBytes = itemDtos.stream().mapToLong(AdminDtos.UploadItemDto::totalBytes).sum();
+      Instant first = userItems.stream().map(item -> item.createdAt).min(Comparator.naturalOrder()).orElse(null);
+      Instant last = userItems.stream().map(item -> item.createdAt).max(Comparator.naturalOrder()).orElse(null);
+      String roles = user.roles.stream().map(r -> r.role.apiValue()).collect(Collectors.joining(", "));
+      uploaders.add(new AdminDtos.UploaderActivityDto(
+        user.id,
+        user.fullName,
+        user.email,
+        roles,
+        userItems.size(),
+        userItems.stream().filter(item -> item.status == ContentStatus.PUBLISHED).count(),
+        userItems.stream().filter(item -> item.status == ContentStatus.DRAFT).count(),
+        userItems.stream().filter(item -> item.status == ContentStatus.SUBMITTED).count(),
+        userItems.stream().filter(item -> item.status == ContentStatus.ARCHIVED).count(),
+        fileCount,
+        totalBytes,
+        formatBytes(totalBytes),
+        first,
+        last,
+        itemDtos
+      ));
+    }
+    uploaders.sort(Comparator.comparingLong(AdminDtos.UploaderActivityDto::totalUploads).reversed());
+
+    long totalBytesAll = uploaders.stream().mapToLong(AdminDtos.UploaderActivityDto::totalBytes).sum();
+    long totalFilesAll = uploaders.stream().mapToLong(AdminDtos.UploaderActivityDto::fileCount).sum();
+    return new AdminDtos.UploadsTrackerDto(
+      uploaders.size(),
+      items.size(),
+      totalFilesAll,
+      formatBytes(totalBytesAll),
+      uploaders
     );
   }
 

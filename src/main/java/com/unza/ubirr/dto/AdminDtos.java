@@ -496,6 +496,51 @@ public final class AdminDtos {
   ) {
   }
 
+  public record UploadItemDto(
+    UUID id,
+    String title,
+    String slug,
+    String contentType,
+    String status,
+    String accessLevel,
+    Integer publicationYear,
+    Instant createdAt,
+    Instant publishedAt,
+    long fileCount,
+    long totalBytes,
+    String categoryName,
+    String departmentName
+  ) {
+  }
+
+  public record UploaderActivityDto(
+    UUID userId,
+    String userName,
+    String userEmail,
+    String roles,
+    long totalUploads,
+    long published,
+    long drafts,
+    long pendingApproval,
+    long archived,
+    long fileCount,
+    long totalBytes,
+    String totalStorage,
+    Instant firstUploadAt,
+    Instant lastUploadAt,
+    List<UploadItemDto> items
+  ) {
+  }
+
+  public record UploadsTrackerDto(
+    long totalUploaders,
+    long totalUploads,
+    long totalFiles,
+    String totalStorage,
+    List<UploaderActivityDto> uploaders
+  ) {
+  }
+
   public record HeroBannerDto(
     UUID id,
     String title,
