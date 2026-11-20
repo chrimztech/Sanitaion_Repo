@@ -1183,6 +1183,15 @@ public class AdminService {
   }
 
   private AdminDtos.ContentEditorDto contentEditorDto(ContentItem item) {
+    // category/department/author can be an un-fetched lazy proxy here — e.g. uniqueSlug()'s
+    // slugExists() loads an unrelated, colliding-slug ContentItem via a plain findBySlug
+    // (no JOIN FETCH) earlier in this same transaction, which can leave the *same* category
+    // sitting in the session as an uninitialized proxy; this entity's own public-field access
+    // (no getters) then reads that proxy's default id (null) instead of triggering a fetch.
+    // Force initialization first, same fix as PublicService.canAccess().
+    if (item.category != null) org.hibernate.Hibernate.initialize(item.category);
+    if (item.department != null) org.hibernate.Hibernate.initialize(item.department);
+    if (item.author != null) org.hibernate.Hibernate.initialize(item.author);
     return new AdminDtos.ContentEditorDto(
       item.id,
       item.title,
