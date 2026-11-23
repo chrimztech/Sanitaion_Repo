@@ -33,7 +33,10 @@ public class ApiExceptionHandler {
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Map<String, Object>> handleGeneric(Exception exception) {
     log.error("Unhandled exception", exception);
-    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(payload(exception.getMessage() != null ? exception.getMessage() : "Unexpected server error"));
+    // Never return exception.getMessage() here: it can leak internal details (field names,
+    // file paths, SQL fragments, stack-trace fragments) to the client. Full details are logged
+    // above for diagnosis; the client only ever sees a generic message.
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(payload("An unexpected error occurred. Please try again or contact support."));
   }
 
   private Map<String, Object> payload(String message) {

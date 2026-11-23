@@ -71,14 +71,17 @@ public class AuthController {
 
   @PostMapping("/forgot-password")
   public AuthDtos.ForgotPasswordResponse forgotPassword(
-    @Valid @RequestBody AuthDtos.ForgotPasswordRequest request
+    @Valid @RequestBody AuthDtos.ForgotPasswordRequest request,
+    HttpServletRequest httpServletRequest
   ) {
+    rateLimitService.checkPasswordReset(getClientIp(httpServletRequest));
     return authService.forgotPassword(request);
   }
 
   @PostMapping("/reset-password")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void resetPassword(@Valid @RequestBody AuthDtos.ResetPasswordRequest request) {
+  public void resetPassword(@Valid @RequestBody AuthDtos.ResetPasswordRequest request, HttpServletRequest httpServletRequest) {
+    rateLimitService.checkPasswordReset(getClientIp(httpServletRequest));
     authService.resetPassword(request);
   }
 
@@ -95,17 +98,20 @@ public class AuthController {
   }
 
   @PostMapping("/ldap-login")
-  public AuthDtos.AuthResponse ldapLogin(@Valid @RequestBody AuthDtos.LdapLoginRequest request) {
+  public AuthDtos.AuthResponse ldapLogin(@Valid @RequestBody AuthDtos.LdapLoginRequest request, HttpServletRequest httpServletRequest) {
+    rateLimitService.checkLogin(getClientIp(httpServletRequest));
     return ldapAuthService.ldapLogin(request);
   }
 
   @PostMapping("/student-login")
-  public AuthDtos.AuthResponse studentLogin(@Valid @RequestBody AuthDtos.StudentLoginRequest request) {
+  public AuthDtos.AuthResponse studentLogin(@Valid @RequestBody AuthDtos.StudentLoginRequest request, HttpServletRequest httpServletRequest) {
+    rateLimitService.checkLogin(getClientIp(httpServletRequest));
     return oapAuthService.studentLogin(request);
   }
 
   @PostMapping("/staff-login")
-  public AuthDtos.AuthResponse staffLogin(@Valid @RequestBody AuthDtos.StaffLoginRequest request) {
+  public AuthDtos.AuthResponse staffLogin(@Valid @RequestBody AuthDtos.StaffLoginRequest request, HttpServletRequest httpServletRequest) {
+    rateLimitService.checkLogin(getClientIp(httpServletRequest));
     return hrAuthService.staffLogin(request);
   }
 

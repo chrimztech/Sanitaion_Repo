@@ -91,8 +91,10 @@ app:
       max-attempts: ${LOCKOUT_MAX_ATTEMPTS:5}
       duration-minutes: ${LOCKOUT_DURATION_MINUTES:15}
   cors:
-    allowed-origin-patterns:
-      - "*"
+    # Comma-separated list (bound via SpEL split in SecurityConfig, so this stays a single
+    # env-overridable string rather than a YAML list). The real frontend is same-origin through
+    # nginx, so this only governs other origins calling the API directly.
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:https://sanitation-hub.unza.ac.zm,http://sanitation-hub.unza.ac.zm}
   jwt:
     secret: ${JWT_SECRET:change-this-to-a-strong-secret-key-in-production-please}
     expiration: PT12H

@@ -347,11 +347,25 @@ public class AdminService {
       .toList();
   }
 
+  // Extensions that can carry executable script/code. FileController also defaults any
+  // non-allowlisted MIME type to a forced download (the real safety net, since this check is
+  // only as good as the filename), but rejecting these outright avoids storing them at all.
+  private static final java.util.Set<String> DANGEROUS_EXTENSIONS = java.util.Set.of(
+    "html", "htm", "svg", "js", "mjs", "php", "phtml", "jsp", "jspx", "asp", "aspx",
+    "exe", "bat", "cmd", "com", "scr", "ps1", "vbs", "vbe", "jar", "msi", "sh", "apk", "dll"
+  );
+
   public PublicDtos.ContentFileDto uploadContentFile(UUID contentId, MultipartFile multipartFile) {
     authContextService.requireContentManager();
     AppUser user = authContextService.requireUser();
     ContentItem item = contentItemRepository.findById(contentId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Content not found"));
     String originalFileName = multipartFile.getOriginalFilename() != null ? multipartFile.getOriginalFilename() : "upload";
+    String extension = originalFileName.contains(".")
+      ? originalFileName.substring(originalFileName.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT)
+      : "";
+    if (DANGEROUS_EXTENSIONS.contains(extension)) {
+      throw new ResponseStatusException(BAD_REQUEST, "This file type (." + extension + ") isn't allowed for library resources.");
+    }
     StorageService.StoredFile storedFile = storageService.storeContentFile(contentId, multipartFile);
 
     // Duplicate detection — an exact byte-for-byte match anywhere else is always rejected;

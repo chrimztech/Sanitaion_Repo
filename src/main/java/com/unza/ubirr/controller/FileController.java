@@ -65,9 +65,30 @@ public class FileController {
     ContentFile file = publicService.fileForPreview(fileId);
     Resource resource = storageService.load(file.filePath);
     MediaType mediaType = storageService.mediaType(file.originalFileName, file.mimeType);
-    ContentDisposition disposition = ContentDisposition.inline().filename(file.originalFileName).build();
+    // mediaType comes from the uploader's own Content-Type/filename, so it isn't trustworthy —
+    // inlining an attacker-uploaded text/html or image/svg+xml file would execute arbitrary
+    // script in this origin (stored XSS) for anyone who previews it. Only render known-safe
+    // (non-script-capable) types inline; everything else downloads instead.
+    ContentDisposition disposition = isSafeToInline(mediaType)
+      ? ContentDisposition.inline().filename(file.originalFileName).build()
+      : ContentDisposition.attachment().filename(file.originalFileName).build();
     // Gated by fileForPreview's access rules, so cache per-browser only (not on a shared/CDN cache).
     return serveResource(resource, mediaType, requestHeaders, disposition, CacheControl.maxAge(Duration.ofHours(1)).cachePrivate(), file.checksum);
+  }
+
+  /**
+   * Whether a MIME type is safe to render inline in the browser. Deliberately an allowlist
+   * (default-deny) rather than a blocklist: image/svg+xml, text/html, text/xml and similar
+   * can carry executable script, so anything not explicitly known-safe falls back to a
+   * forced download instead of being guessed at.
+   */
+  private static boolean isSafeToInline(MediaType mediaType) {
+    String type = mediaType.getType().toLowerCase(java.util.Locale.ROOT);
+    String subtype = mediaType.getSubtype().toLowerCase(java.util.Locale.ROOT);
+    if ("video".equals(type) || "audio".equals(type)) return true;
+    if ("image".equals(type)) return !"svg+xml".equals(subtype);
+    if ("application".equals(type)) return "pdf".equals(subtype);
+    return false;
   }
 
   @GetMapping("/{fileId}/download")
@@ -135,9 +156,12 @@ public class FileController {
     }
     Resource resource = storageService.load(site.imagePath);
     MediaType mediaType = storageService.mediaType(site.imagePath, null);
+    ContentDisposition disposition = isSafeToInline(mediaType)
+      ? ContentDisposition.inline().filename("site-image").build()
+      : ContentDisposition.attachment().filename("site-image").build();
     return ResponseEntity.ok()
       .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("site-image").build().toString())
+      .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
       .body(resource);
   }
 
@@ -148,9 +172,12 @@ public class FileController {
     if (event.bannerImagePath == null) throw new ResponseStatusException(NOT_FOUND, "No image");
     Resource resource = storageService.load(event.bannerImagePath);
     MediaType mediaType = storageService.mediaType(event.bannerImagePath, null);
+    ContentDisposition disposition = isSafeToInline(mediaType)
+      ? ContentDisposition.inline().filename("event-image").build()
+      : ContentDisposition.attachment().filename("event-image").build();
     return ResponseEntity.ok()
       .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("event-image").build().toString())
+      .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
       .body(resource);
   }
 
@@ -161,9 +188,12 @@ public class FileController {
     if (session.imagePath == null) throw new ResponseStatusException(NOT_FOUND, "No image");
     Resource resource = storageService.load(session.imagePath);
     MediaType mediaType = storageService.mediaType(session.imagePath, null);
+    ContentDisposition disposition = isSafeToInline(mediaType)
+      ? ContentDisposition.inline().filename("training-image").build()
+      : ContentDisposition.attachment().filename("training-image").build();
     return ResponseEntity.ok()
       .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("training-image").build().toString())
+      .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
       .body(resource);
   }
 
@@ -174,9 +204,12 @@ public class FileController {
     if (banner.imagePath == null) throw new ResponseStatusException(NOT_FOUND, "No image");
     Resource resource = storageService.load(banner.imagePath);
     MediaType mediaType = storageService.mediaType(banner.imagePath, null);
+    ContentDisposition disposition = isSafeToInline(mediaType)
+      ? ContentDisposition.inline().filename("banner-image").build()
+      : ContentDisposition.attachment().filename("banner-image").build();
     return ResponseEntity.ok()
       .contentType(mediaType)
-      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename("banner-image").build().toString())
+      .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
       .body(resource);
   }
 }

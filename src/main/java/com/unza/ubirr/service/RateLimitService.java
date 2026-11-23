@@ -38,6 +38,13 @@ public class RateLimitService {
     check("register:" + sanitize(ip), registerMax);
   }
 
+  // Password reset requests and the alternate (LDAP/student/staff) login paths are just as
+  // brute-forceable as the main login endpoint but previously had no limit at all — reuse the
+  // login bucket's threshold for all of them.
+  public void checkPasswordReset(String ip) {
+    check("pwreset:" + sanitize(ip), loginMax);
+  }
+
   private void check(String key, int max) {
     String fullKey = PREFIX + key;
     try {

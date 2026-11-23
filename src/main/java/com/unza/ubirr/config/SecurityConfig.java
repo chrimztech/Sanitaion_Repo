@@ -87,9 +87,15 @@ public class SecurityConfig {
   }
 
   @Bean
-  public CorsConfigurationSource corsConfigurationSource() {
+  public CorsConfigurationSource corsConfigurationSource(
+    @org.springframework.beans.factory.annotation.Value("#{'${app.cors.allowed-origin-patterns}'.split(',')}") List<String> allowedOriginPatterns
+  ) {
     CorsConfiguration configuration = new CorsConfiguration();
-    configuration.addAllowedOriginPattern("*");
+    // A wildcard origin combined with allowCredentials(true) lets *any* website make
+    // authenticated-looking cross-origin requests against this API. The real frontend is
+    // always same-origin through nginx's reverse proxy (so this never affects normal site
+    // use) — only other origins calling the API directly are restricted.
+    configuration.setAllowedOriginPatterns(allowedOriginPatterns);
     configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(List.of("*"));
     configuration.setAllowCredentials(true);
