@@ -66,6 +66,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Sort;
@@ -462,6 +463,49 @@ public class AdminService {
       auditService.log(user, "content.fix_access_levels", "content_items", broken.size() + " items upgraded");
     }
     return broken.size();
+  }
+
+  // One-off catch-up for resources uploaded while generateAndAttachAsync()'s DB update was
+  // silently failing (missing @Transactional — see ThumbnailService): regenerates a thumbnail
+  // from each such item's first attached file, synchronously, since this call already runs
+  // inside AdminService's class-level @Transactional.
+  @Caching(evict = {
+    @CacheEvict(value = "public-resources", allEntries = true),
+    @CacheEvict(value = "public-resources-page", allEntries = true),
+    @CacheEvict(value = "public-resource",  allEntries = true),
+    @CacheEvict(value = "public-home",      allEntries = true),
+    @CacheEvict(value = "public-categories", allEntries = true),
+    @CacheEvict(value = "public-gallery",   allEntries = true),
+  })
+  public AdminDtos.BackfillThumbnailsResultDto backfillThumbnails() {
+    authContextService.requireContentManager();
+    List<ContentItem> items = contentItemRepository.findAllForAdmin().stream()
+      .filter(item -> item.thumbnailPath == null)
+      .toList();
+    int generated = 0;
+    int skipped = 0;
+    for (ContentItem item : items) {
+      List<ContentFile> files = contentFileRepository.findByContentItem_IdOrderByCreatedAtAsc(item.id);
+      if (files.isEmpty()) {
+        skipped++;
+        continue;
+      }
+      ContentFile first = files.get(0);
+      try {
+        java.nio.file.Path path = storageService.load(first.filePath).getFile().toPath();
+        Optional<String> thumb = thumbnailService.generate(path, first.mimeType, item.id);
+        if (thumb.isPresent()) {
+          item.thumbnailPath = thumb.get();
+          contentItemRepository.save(item);
+          generated++;
+        } else {
+          skipped++;
+        }
+      } catch (Exception e) {
+        skipped++;
+      }
+    }
+    return new AdminDtos.BackfillThumbnailsResultDto(generated, skipped, items.size());
   }
 
   public void deleteContent(UUID id) {

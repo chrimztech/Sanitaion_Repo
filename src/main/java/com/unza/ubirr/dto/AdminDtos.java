@@ -541,6 +541,13 @@ public final class AdminDtos {
   ) {
   }
 
+  public record BackfillThumbnailsResultDto(
+    int generated,
+    int skipped,
+    int total
+  ) {
+  }
+
   public record HeroBannerDto(
     UUID id,
     String title,

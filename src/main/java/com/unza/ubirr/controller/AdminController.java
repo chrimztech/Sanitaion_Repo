@@ -84,6 +84,11 @@ public class AdminController {
     return java.util.Map.of("fixed", adminService.fixDraftAccessLevels());
   }
 
+  @PostMapping("/content/backfill-thumbnails")
+  public AdminDtos.BackfillThumbnailsResultDto backfillThumbnails() {
+    return adminService.backfillThumbnails();
+  }
+
   @DeleteMapping("/content/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void deleteContent(@PathVariable UUID id) {

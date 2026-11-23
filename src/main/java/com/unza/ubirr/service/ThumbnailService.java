@@ -9,6 +9,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -65,8 +66,16 @@ public class ThumbnailService {
    * rasterization, FFmpeg frame extraction) can take seconds and previously ran inline,
    * blocking the HTTP response. Runs on the async executor and attaches the result via an
    * atomic UPDATE (only if no thumbnail was set in the meantime) once generation finishes.
+   *
+   * @Async hands this off to a brand new thread with no transaction of its own, so the
+   * @Modifying setThumbnailIfAbsent() update below requires its own @Transactional here —
+   * without it, every single generated thumbnail was silently discarded: the JPEG was
+   * rendered and saved to disk, then the UPDATE that would have pointed the content item at
+   * it threw TransactionRequiredException, caught only by Spring's async uncaught-exception
+   * logger (never surfaced to the request, and never retried).
    */
   @Async
+  @Transactional
   public void generateAndAttachAsync(Path sourceFile, String mimeType, UUID contentId) {
     generate(sourceFile, mimeType, contentId)
       .ifPresent(path -> contentItemRepository.setThumbnailIfAbsent(contentId, path));
